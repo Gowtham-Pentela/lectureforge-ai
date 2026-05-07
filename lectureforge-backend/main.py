@@ -16,7 +16,7 @@ from models.schemas import (
 )
 
 from services.job_store import JobStore
-from services.openai_service import create_embedding
+from services.openai_service import create_embedding, generate_text
 from agents.agent1_ingestion import Agent1Ingestion
 from agents.agent2_analysis import Agent2Analysis
 from agents.agent3_study import Agent3Study
@@ -65,6 +65,24 @@ def debug_env():
         "openai_model": os.getenv("OPENAI_MODEL"),
         "embedding_model": os.getenv("OPENAI_EMBEDDING_MODEL"),
     }
+@app.get("/debug-openai")
+def debug_openai():
+    try:
+        result = generate_text(
+            system_prompt="You are a test assistant.",
+            user_prompt="Reply with exactly: OpenAI connection works"
+        )
+
+        return {
+            "success": True,
+            "response": result,
+        }
+
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+        }
 @app.post("/process-video", response_model=ProcessVideoResponse)
 async def process_video(request: ProcessVideoRequest):
     job_id = str(uuid.uuid4())
