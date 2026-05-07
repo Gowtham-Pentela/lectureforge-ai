@@ -21,6 +21,7 @@ const languages = [
 export default function StudyDashboard({
   studyKit,
   jobId,
+  sourceVideoUrl,
   selectedLanguage,
   onLanguageChange,
   isTranslating,
@@ -100,7 +101,12 @@ export default function StudyDashboard({
 
       <Tabs activeTab={activeTab} setActiveTab={setActiveTab} />
 
-      {activeTab === "outline" && <OutlineTab outline={studyKit.outline || []} />}
+      {activeTab === "outline" && (
+        <OutlineTab
+          outline={studyKit.outline || []}
+          sourceVideoUrl={sourceVideoUrl}
+        />
+      )}
 
       {activeTab === "summaries" && (
         <SummariesTab summaries={studyKit.summaries} />

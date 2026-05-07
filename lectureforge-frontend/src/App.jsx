@@ -15,6 +15,7 @@ export default function App() {
   const [studyKit, setStudyKit] = useState(null);
   const [englishStudyKit, setEnglishStudyKit] = useState(null);
   const [selectedLanguage, setSelectedLanguage] = useState("English");
+  const [sourceVideoUrl, setSourceVideoUrl] = useState("");
 
   const [jobStatus, setJobStatus] = useState(null);
   const [error, setError] = useState("");
@@ -22,6 +23,7 @@ export default function App() {
 
   async function handleProcessVideo(youtubeUrl) {
     try {
+      setSourceVideoUrl(youtubeUrl);
       setError("");
       setStudyKit(null);
       setEnglishStudyKit(null);
@@ -222,6 +224,7 @@ export default function App() {
           <StudyDashboard
             studyKit={studyKit}
             jobId={jobId}
+            sourceVideoUrl={sourceVideoUrl}
             selectedLanguage={selectedLanguage}
             onLanguageChange={handleLanguageChange}
             isTranslating={isTranslating}
