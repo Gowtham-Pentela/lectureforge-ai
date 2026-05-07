@@ -1,67 +1,59 @@
-import React from "react";
-import { PlayCircle, Languages } from "lucide-react";
+import React, { useState } from "react";
+import { PlayCircle } from "lucide-react";
 
-export default function VideoForm({
-  youtubeUrl,
-  setYoutubeUrl,
-  targetLanguage,
-  setTargetLanguage,
-  onSubmit,
-  isLoading,
-}) {
+export default function VideoForm({ onSubmit, disabled }) {
+  const [youtubeUrl, setYoutubeUrl] = useState("");
+
+  function handleSubmit(event) {
+    event.preventDefault();
+
+    const cleanedUrl = youtubeUrl.trim();
+
+    if (!cleanedUrl) {
+      return;
+    }
+
+    onSubmit(cleanedUrl);
+  }
+
+  const isSubmitDisabled = disabled || !youtubeUrl.trim();
+
   return (
-    <form
-      onSubmit={onSubmit}
-      className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-soft md:p-6"
-    >
-      <label className="mb-2 block text-sm font-semibold text-slate-700">
-        YouTube lecture URL
-      </label>
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <label
+          htmlFor="youtube-url"
+          className="mb-2 block text-sm font-semibold text-slate-700"
+        >
+          YouTube lecture URL
+        </label>
 
-      <div className="flex flex-col gap-3 md:flex-row">
         <input
+          id="youtube-url"
+          type="url"
           value={youtubeUrl}
           onChange={(event) => setYoutubeUrl(event.target.value)}
           placeholder="https://www.youtube.com/watch?v=..."
-          className="min-h-12 flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
-          disabled={isLoading}
+          disabled={disabled}
+          className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100"
         />
+      </div>
 
-        <div className="relative md:w-56">
-          <Languages
-            size={17}
-            className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
-          />
-          <select
-            value={targetLanguage}
-            onChange={(event) => setTargetLanguage(event.target.value)}
-            className="min-h-12 w-full appearance-none rounded-2xl border border-slate-200 bg-slate-50 px-10 text-sm outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
-            disabled={isLoading}
-          >
-            <option>English</option>
-            <option>Spanish</option>
-            <option>Hindi</option>
-            <option>Telugu</option>
-            <option>Arabic</option>
-            <option>Chinese</option>
-            <option>French</option>
-          </select>
-        </div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm text-slate-500">
+          The video is processed once in English. You can translate the study
+          kit after it is generated.
+        </p>
 
         <button
           type="submit"
-          disabled={isLoading || !youtubeUrl.trim()}
-          className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-blue-600 px-6 text-sm font-semibold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
+          disabled={isSubmitDisabled}
+          className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
         >
-          <PlayCircle size={18} />
-          Generate
+          <PlayCircle className="h-5 w-5" />
+          Generate Study Kit
         </button>
       </div>
-
-      <p className="mt-3 text-xs leading-5 text-slate-500">
-        The backend first tries YouTube transcripts, then subtitle extraction,
-        then Whisper fallback when audio access is available.
-      </p>
     </form>
   );
 }
