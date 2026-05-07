@@ -37,17 +37,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-@app.get("/debug-env")
-def debug_env():
-    key = os.getenv("OPENAI_API_KEY")
 
-    return {
-        "openai_key_present": bool(key),
-        "openai_key_prefix": key[:7] if key else None,
-        "openai_key_length": len(key) if key else 0,
-        "openai_model": os.getenv("OPENAI_MODEL"),
-        "embedding_model": os.getenv("OPENAI_EMBEDDING_MODEL"),
-    }
 
 job_store = JobStore()
 
@@ -64,7 +54,17 @@ def root():
         "docs": "/docs",
     }
 
+@app.get("/debug-env")
+def debug_env():
+    key = os.getenv("OPENAI_API_KEY")
 
+    return {
+        "openai_key_present": bool(key),
+        "openai_key_prefix": key[:7] if key else None,
+        "openai_key_length": len(key) if key else 0,
+        "openai_model": os.getenv("OPENAI_MODEL"),
+        "embedding_model": os.getenv("OPENAI_EMBEDDING_MODEL"),
+    }
 @app.post("/process-video", response_model=ProcessVideoResponse)
 async def process_video(request: ProcessVideoRequest):
     job_id = str(uuid.uuid4())
