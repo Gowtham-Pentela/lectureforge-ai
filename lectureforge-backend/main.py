@@ -3,6 +3,7 @@ import asyncio
 import numpy as np
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+import os
 
 from models.schemas import (
     ProcessVideoRequest,
@@ -36,7 +37,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+@app.get("/debug-env")
+def debug_env():
+    key = os.getenv("OPENAI_API_KEY")
 
+    return {
+        "openai_key_present": bool(key),
+        "openai_key_prefix": key[:7] if key else None,
+        "openai_key_length": len(key) if key else 0,
+        "openai_model": os.getenv("OPENAI_MODEL"),
+        "embedding_model": os.getenv("OPENAI_EMBEDDING_MODEL"),
+    }
 
 job_store = JobStore()
 
