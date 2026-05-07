@@ -1,9 +1,9 @@
+import os
 import uuid
 import asyncio
 import numpy as np
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-import os
 
 from models.schemas import (
     ProcessVideoRequest,
@@ -54,6 +54,7 @@ def root():
         "docs": "/docs",
     }
 
+
 @app.get("/debug-env")
 def debug_env():
     key = os.getenv("OPENAI_API_KEY")
@@ -65,12 +66,14 @@ def debug_env():
         "openai_model": os.getenv("OPENAI_MODEL"),
         "embedding_model": os.getenv("OPENAI_EMBEDDING_MODEL"),
     }
+
+
 @app.get("/debug-openai")
 def debug_openai():
     try:
         result = generate_text(
             system_prompt="You are a test assistant.",
-            user_prompt="Reply with exactly: OpenAI connection works"
+            user_prompt="Reply with exactly: OpenAI connection works",
         )
 
         return {
@@ -83,6 +86,8 @@ def debug_openai():
             "success": False,
             "error": str(e),
         }
+
+
 @app.post("/process-video", response_model=ProcessVideoResponse)
 async def process_video(request: ProcessVideoRequest):
     job_id = str(uuid.uuid4())
@@ -158,6 +163,7 @@ async def run_video_processing_pipeline(
             progress=100,
             message="Processing failed",
             error=public_error["message"],
+            raw_error=public_error.get("raw_error"),
             error_code=public_error["error_code"],
             can_continue_with_transcript=public_error["can_continue_with_transcript"],
         )
@@ -198,6 +204,7 @@ async def run_transcript_processing_pipeline(
             progress=100,
             message="Processing failed",
             error=public_error["message"],
+            raw_error=public_error.get("raw_error"),
             error_code=public_error["error_code"],
             can_continue_with_transcript=public_error["can_continue_with_transcript"],
         )
@@ -282,6 +289,7 @@ def get_job_status(job_id: str):
         "progress": job["progress"],
         "message": job["message"],
         "error": job.get("error"),
+        "raw_error": job.get("raw_error"),
         "error_code": job.get("error_code"),
         "can_continue_with_transcript": job.get("can_continue_with_transcript", False),
     }
@@ -299,6 +307,7 @@ def get_study_kit(job_id: str):
             status_code=500,
             detail={
                 "message": job.get("error", "Unknown error"),
+                "raw_error": job.get("raw_error"),
                 "error_code": job.get("error_code"),
                 "can_continue_with_transcript": job.get("can_continue_with_transcript", False),
             },
@@ -325,6 +334,7 @@ def semantic_search(request: SearchRequest):
             status_code=500,
             detail={
                 "message": job.get("error", "Processing failed"),
+                "raw_error": job.get("raw_error"),
                 "error_code": job.get("error_code"),
                 "can_continue_with_transcript": job.get("can_continue_with_transcript", False),
             },
@@ -388,33 +398,54 @@ def cosine_similarity(a, b) -> float:
 def build_public_error_message(raw_error: str):
     lower_error = raw_error.lower()
 
-    if "http error 403" in lower_error or "forbidden" in lower_error:
+    if "insufficient_quota" in lower_error or "exceeded your current quota" in lower_error:
         return {
-            "error_code": "YOUTUBE_ACCESS_BLOCKED",
+            "error_code": "OPENAI_QUOTA_ERROR",
             "message": (
-                "YouTube blocked automated access to this video. "
-                "Try a different public lecture URL, or use the transcript fallback."
-            ),
-            "can_continue_with_transcript": True,
-        }
-
-    if "no captions" in lower_error or "no transcript" in lower_error:
-        return {
-            "error_code": "NO_TRANSCRIPT_AVAILABLE",
-            "message": (
-                "No accessible captions were found for this YouTube video. "
-                "Try another video with captions, or use the transcript fallback."
-            ),
-            "can_continue_with_transcript": True,
-        }
-
-    if "openai" in lower_error or "api key" in lower_error or "authentication" in lower_error:
-        return {
-            "error_code": "OPENAI_CONFIG_ERROR",
-            "message": (
-                "The OpenAI request failed. Check that your OPENAI_API_KEY is set correctly in the .env file."
+                "OpenAI rejected the request because the account has insufficient quota or billing is not active."
             ),
             "can_continue_with_transcript": False,
+            "raw_error": raw_error,
+        }
+
+    if "rate_limit" in lower_error or "429" in lower_error:
+        return {
+            "error_code": "OPENAI_RATE_LIMIT",
+            "message": (
+                "OpenAI rate-limited the request. Please retry after a short delay."
+            ),
+            "can_continue_with_transcript": False,
+            "raw_error": raw_error,
+        }
+
+    if "incorrect api key" in lower_error or "invalid api key" in lower_error or "401" in lower_error:
+        return {
+            "error_code": "OPENAI_AUTH_ERROR",
+            "message": (
+                "OpenAI rejected the API key. Check that the Render OPENAI_API_KEY value is valid and not revoked."
+            ),
+            "can_continue_with_transcript": False,
+            "raw_error": raw_error,
+        }
+
+    if "model_not_found" in lower_error or "does not have access to model" in lower_error:
+        return {
+            "error_code": "OPENAI_MODEL_ERROR",
+            "message": (
+                "OpenAI rejected the model name. Check OPENAI_MODEL and OPENAI_EMBEDDING_MODEL in Render."
+            ),
+            "can_continue_with_transcript": False,
+            "raw_error": raw_error,
+        }
+
+    if "maximum context length" in lower_error or "context_length_exceeded" in lower_error:
+        return {
+            "error_code": "OPENAI_CONTEXT_LENGTH_ERROR",
+            "message": (
+                "The lecture transcript is too long for the current model call. Use a shorter video or chunk the analysis step."
+            ),
+            "can_continue_with_transcript": True,
+            "raw_error": raw_error,
         }
 
     if "json" in lower_error:
@@ -424,6 +455,27 @@ def build_public_error_message(raw_error: str):
                 "The model returned an invalid structured response. Please retry the request."
             ),
             "can_continue_with_transcript": False,
+            "raw_error": raw_error,
+        }
+
+    if "http error 403" in lower_error or "forbidden" in lower_error:
+        return {
+            "error_code": "YOUTUBE_ACCESS_BLOCKED",
+            "message": (
+                "YouTube blocked automated access to this video. Try a different public lecture URL."
+            ),
+            "can_continue_with_transcript": True,
+            "raw_error": raw_error,
+        }
+
+    if "no captions" in lower_error or "no transcript" in lower_error:
+        return {
+            "error_code": "NO_TRANSCRIPT_AVAILABLE",
+            "message": (
+                "No accessible captions were found for this YouTube video. Try another video with captions."
+            ),
+            "can_continue_with_transcript": True,
+            "raw_error": raw_error,
         }
 
     if "empty" in lower_error:
@@ -431,12 +483,14 @@ def build_public_error_message(raw_error: str):
             "error_code": "EMPTY_INPUT",
             "message": "The provided transcript or extracted transcript was empty.",
             "can_continue_with_transcript": True,
+            "raw_error": raw_error,
         }
 
     return {
         "error_code": "PROCESSING_ERROR",
         "message": (
-            "Processing failed unexpectedly. Please retry with another YouTube URL or transcript."
+            "Processing failed unexpectedly. Please retry with another YouTube URL."
         ),
         "can_continue_with_transcript": True,
+        "raw_error": raw_error,
     }
