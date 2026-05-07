@@ -1,117 +1,180 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useState } from "react";
 import Header from "./components/Header";
 import VideoForm from "./components/VideoForm";
 import ProgressCard from "./components/ProgressCard";
 import StudyDashboard from "./components/StudyDashboard";
-import { getJobStatus, getStudyKit, processVideo } from "./lib/api";
+import {
+  processVideo,
+  getJobStatus,
+  getStudyKit,
+  translateStudyKit,
+} from "./lib/api";
 
 export default function App() {
-  const [youtubeUrl, setYoutubeUrl] = useState("https://www.youtube.com/watch?v=aircAruvnKk");
-  const [targetLanguage, setTargetLanguage] = useState("English");
-  const [jobId, setJobId] = useState("");
-  const [jobStatus, setJobStatus] = useState(null);
+  const [jobId, setJobId] = useState(null);
   const [studyKit, setStudyKit] = useState(null);
+  const [englishStudyKit, setEnglishStudyKit] = useState(null);
+  const [selectedLanguage, setSelectedLanguage] = useState("English");
+
+  const [status, setStatus] = useState("idle");
+  const [progress, setProgress] = useState(0);
+  const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [isStarting, setIsStarting] = useState(false);
-  const pollRef = useRef(null);
 
-  async function handleSubmit(event) {
-    event.preventDefault();
+  const [isTranslating, setIsTranslating] = useState(false);
 
-    setError("");
-    setStudyKit(null);
-    setJobStatus(null);
-    setJobId("");
-    setIsStarting(true);
-
+  async function handleProcessVideo(youtubeUrl) {
     try {
-      const data = await processVideo({
-        youtubeUrl,
-        targetLanguage,
-      });
+      setError("");
+      setStudyKit(null);
+      setEnglishStudyKit(null);
+      setSelectedLanguage("English");
+      setJobId(null);
+      setStatus("queued");
+      setProgress(0);
+      setMessage("Starting video processing");
 
-      setJobId(data.job_id);
-      setJobStatus({
-        job_id: data.job_id,
-        status: data.status,
-        progress: 0,
-        message: data.message,
-      });
+      const response = await processVideo(youtubeUrl);
+      const newJobId = response.job_id;
+
+      setJobId(newJobId);
+      setStatus(response.status);
+      setMessage(response.message || "Video processing started");
+
+      pollJobStatus(newJobId);
     } catch (err) {
-      setError(err.message);
-    } finally {
-      setIsStarting(false);
+      setStatus("failed");
+      setError(err.message || "Failed to process video");
     }
   }
 
-  useEffect(() => {
-    if (!jobId) return;
+  async function pollJobStatus(newJobId) {
+    let attempts = 0;
+    const maxAttempts = 180;
 
-    if (pollRef.current) {
-      clearInterval(pollRef.current);
-    }
-
-    pollRef.current = setInterval(async () => {
+    const intervalId = setInterval(async () => {
       try {
-        const status = await getJobStatus(jobId);
-        setJobStatus(status);
+        attempts += 1;
 
-        if (status.status === "completed") {
-          clearInterval(pollRef.current);
-          pollRef.current = null;
+        const job = await getJobStatus(newJobId);
 
-          const kit = await getStudyKit(jobId);
+        setStatus(job.status);
+        setProgress(job.progress || 0);
+        setMessage(job.message || "");
+
+        if (job.status === "completed") {
+          clearInterval(intervalId);
+
+          const kit = await getStudyKit(newJobId);
+
+          setJobId(newJobId);
+          setEnglishStudyKit(kit);
           setStudyKit(kit);
+          setSelectedLanguage("English");
+          setProgress(100);
+          setMessage("Study kit ready");
+          setStatus("completed");
         }
 
-        if (status.status === "failed") {
-          clearInterval(pollRef.current);
-          pollRef.current = null;
+        if (job.status === "failed") {
+          clearInterval(intervalId);
+          setStatus("failed");
+          setError(job.error || "Processing failed");
+        }
+
+        if (attempts >= maxAttempts) {
+          clearInterval(intervalId);
+          setStatus("failed");
+          setError("Processing took too long. Please try a shorter lecture.");
         }
       } catch (err) {
-        setError(err.message);
-        clearInterval(pollRef.current);
-        pollRef.current = null;
+        clearInterval(intervalId);
+        setStatus("failed");
+        setError(err.message || "Failed to check job status");
       }
-    }, 1800);
+    }, 2500);
+  }
 
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
-  }, [jobId]);
+  async function handleLanguageChange(language) {
+    setSelectedLanguage(language);
 
-  const isLoading =
-    isStarting ||
-    (jobStatus &&
-      jobStatus.status !== "completed" &&
-      jobStatus.status !== "failed");
+    if (!englishStudyKit || !jobId) {
+      return;
+    }
+
+    if (language === "English") {
+      setStudyKit(englishStudyKit);
+      return;
+    }
+
+    try {
+      setIsTranslating(true);
+      setError("");
+
+      const translatedKit = await translateStudyKit(jobId, language);
+
+      setStudyKit(translatedKit);
+    } catch (err) {
+      setError(err.message || "Translation failed");
+    } finally {
+      setIsTranslating(false);
+    }
+  }
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-6 md:px-8 lg:px-10">
-      <div className="mx-auto max-w-7xl">
-        <Header />
+    <div className="min-h-screen bg-slate-50 text-slate-900">
+      <Header />
 
-        <VideoForm
-          youtubeUrl={youtubeUrl}
-          setYoutubeUrl={setYoutubeUrl}
-          targetLanguage={targetLanguage}
-          setTargetLanguage={setTargetLanguage}
-          onSubmit={handleSubmit}
-          isLoading={isLoading}
-        />
+      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <section className="mb-8">
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="mb-6">
+              <p className="text-sm font-semibold uppercase tracking-wide text-blue-600">
+                LectureForge AI
+              </p>
+
+              <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
+                Turn YouTube lectures into study kits
+              </h1>
+
+              <p className="mt-3 max-w-3xl text-base leading-7 text-slate-600">
+                Paste a YouTube lecture URL. LectureForge processes the video
+                once in English, then lets you translate the generated study
+                material without reprocessing the video.
+              </p>
+            </div>
+
+            <VideoForm
+              onSubmit={handleProcessVideo}
+              disabled={status === "processing" || status === "queued"}
+            />
+          </div>
+        </section>
+
+        {(status === "queued" || status === "processing") && (
+          <ProgressCard
+            status={status}
+            progress={progress}
+            message={message}
+          />
+        )}
 
         {error && (
-          <div className="mt-5 rounded-3xl border border-red-100 bg-red-50 p-5 text-sm font-semibold leading-6 text-red-700">
+          <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {error}
           </div>
         )}
 
-        <div className="mt-5">
-          <ProgressCard status={jobStatus} />
-        </div>
-
-        {studyKit && <StudyDashboard jobId={jobId} studyKit={studyKit} />}
-      </div>
+        {studyKit && (
+          <StudyDashboard
+            studyKit={studyKit}
+            jobId={jobId}
+            selectedLanguage={selectedLanguage}
+            onLanguageChange={handleLanguageChange}
+            isTranslating={isTranslating}
+          />
+        )}
+      </main>
     </div>
   );
 }

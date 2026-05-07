@@ -1,7 +1,9 @@
 import os
 import uuid
+import json
 import asyncio
 import numpy as np
+from copy import deepcopy
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -13,6 +15,7 @@ from models.schemas import (
     SearchResponse,
     SearchResult,
     LectureAnalysis,
+    TranslateStudyKitRequest,
 )
 
 from services.job_store import JobStore
@@ -57,14 +60,18 @@ def root():
 
 @app.get("/debug-env")
 def debug_env():
-    key = os.getenv("OPENAI_API_KEY")
+    openai_key = os.getenv("OPENAI_API_KEY")
+    supadata_key = os.getenv("SUPADATA_API_KEY")
 
     return {
-        "openai_key_present": bool(key),
-        "openai_key_prefix": key[:7] if key else None,
-        "openai_key_length": len(key) if key else 0,
+        "openai_key_present": bool(openai_key),
+        "openai_key_prefix": openai_key[:7] if openai_key else None,
+        "openai_key_length": len(openai_key) if openai_key else 0,
         "openai_model": os.getenv("OPENAI_MODEL"),
         "embedding_model": os.getenv("OPENAI_EMBEDDING_MODEL"),
+        "supadata_key_present": bool(supadata_key),
+        "supadata_key_prefix": supadata_key[:7] if supadata_key else None,
+        "supadata_key_length": len(supadata_key) if supadata_key else 0,
     }
 
 
@@ -97,7 +104,7 @@ async def process_video(request: ProcessVideoRequest):
         run_video_processing_pipeline(
             job_id=job_id,
             youtube_url=request.youtube_url,
-            target_language=request.target_language,
+            target_language="English",
         )
     )
 
@@ -118,7 +125,7 @@ async def process_transcript(request: ProcessTranscriptRequest):
             job_id=job_id,
             lecture_title=request.lecture_title,
             transcript=request.transcript,
-            target_language=request.target_language,
+            target_language="English",
         )
     )
 
@@ -242,7 +249,7 @@ async def run_common_study_pipeline(
         job_id,
         status="processing",
         progress=60,
-        message="Agent 3 is generating study kit",
+        message="Agent 3 is generating English study kit",
     )
 
     study_kit = await asyncio.to_thread(
@@ -322,6 +329,59 @@ def get_study_kit(job_id: str):
     return job["study_kit"]
 
 
+@app.post("/translate-study-kit")
+def translate_study_kit(request: TranslateStudyKitRequest):
+    job = job_store.get_job(request.job_id)
+
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if job["status"] != "completed":
+        raise HTTPException(
+            status_code=400,
+            detail="Study kit is not ready yet",
+        )
+
+    target_language = request.target_language.strip()
+
+    if not target_language or target_language == "English":
+        return job["study_kit"]
+
+    cached_translation = job_store.get_translation(
+        request.job_id,
+        target_language,
+    )
+
+    if cached_translation:
+        return cached_translation
+
+    try:
+        translated_study_kit = translate_existing_study_kit(
+            study_kit=job["study_kit"],
+            target_language=target_language,
+        )
+
+        job_store.add_translation(
+            request.job_id,
+            target_language,
+            translated_study_kit,
+        )
+
+        return translated_study_kit
+
+    except Exception as e:
+        public_error = build_public_error_message(str(e))
+
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "message": public_error["message"],
+                "raw_error": public_error.get("raw_error"),
+                "error_code": public_error["error_code"],
+            },
+        )
+
+
 @app.post("/search", response_model=SearchResponse)
 def semantic_search(request: SearchRequest):
     job = job_store.get_job(request.job_id)
@@ -381,6 +441,114 @@ def semantic_search(request: SearchRequest):
         query=request.query,
         results=scored_results[: request.top_k],
     )
+
+
+def translate_existing_study_kit(study_kit, target_language: str):
+    study_kit_dict = (
+        study_kit.model_dump()
+        if hasattr(study_kit, "model_dump")
+        else dict(study_kit)
+    )
+
+    translation_payload = {
+        "lecture_title": study_kit_dict.get("lecture_title"),
+        "outline": study_kit_dict.get("outline", []),
+        "key_concepts": study_kit_dict.get("key_concepts", []),
+        "summaries": study_kit_dict.get("summaries", {}),
+        "flashcards": study_kit_dict.get("flashcards", []),
+        "concept_map": study_kit_dict.get("concept_map", {}),
+    }
+
+    system_prompt = f"""
+You are a precise educational translation assistant.
+
+Translate the provided study kit content into {target_language}.
+
+Rules:
+- Return valid JSON only.
+- Preserve the exact same JSON structure.
+- Do not change timestamps, IDs, start times, end times, scores, or numeric values.
+- Translate only human-readable text fields.
+- Do not translate technical identifiers like node ids, source ids, or target ids.
+- Keep programming terms understandable.
+- If a term is commonly used in English in programming, you may keep it in English.
+"""
+
+    user_prompt = f"""
+Translate this study kit content into {target_language}:
+
+{json.dumps(translation_payload, ensure_ascii=False)}
+"""
+
+    translated_text = generate_text(
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+    )
+
+    translated_payload = extract_json_from_text(translated_text)
+
+    translated_study_kit = deepcopy(study_kit_dict)
+
+    translated_study_kit["lecture_title"] = translated_payload.get(
+        "lecture_title",
+        study_kit_dict.get("lecture_title"),
+    )
+
+    translated_study_kit["outline"] = translated_payload.get(
+        "outline",
+        study_kit_dict.get("outline", []),
+    )
+
+    translated_study_kit["key_concepts"] = translated_payload.get(
+        "key_concepts",
+        study_kit_dict.get("key_concepts", []),
+    )
+
+    translated_study_kit["summaries"] = translated_payload.get(
+        "summaries",
+        study_kit_dict.get("summaries", {}),
+    )
+
+    translated_study_kit["flashcards"] = translated_payload.get(
+        "flashcards",
+        study_kit_dict.get("flashcards", []),
+    )
+
+    translated_study_kit["concept_map"] = translated_payload.get(
+        "concept_map",
+        study_kit_dict.get("concept_map", {}),
+    )
+
+    translated_study_kit["bilingual_output"] = {
+        "source_language": "English",
+        "target_language": target_language,
+    }
+
+    return translated_study_kit
+
+
+def extract_json_from_text(text: str):
+    cleaned = text.strip()
+
+    if cleaned.startswith("```json"):
+        cleaned = cleaned.replace("```json", "", 1).strip()
+
+    if cleaned.startswith("```"):
+        cleaned = cleaned.replace("```", "", 1).strip()
+
+    if cleaned.endswith("```"):
+        cleaned = cleaned[:-3].strip()
+
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        start = cleaned.find("{")
+        end = cleaned.rfind("}")
+
+        if start == -1 or end == -1:
+            raise ValueError("Translation response did not contain valid JSON")
+
+        return json.loads(cleaned[start : end + 1])
 
 
 def cosine_similarity(a, b) -> float:

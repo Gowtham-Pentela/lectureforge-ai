@@ -11,6 +11,7 @@ class JobStore:
             "progress": 0,
             "message": "Job queued",
             "study_kit": None,
+            "translations": {},
             "error": None,
             "raw_error": None,
             "error_code": None,
@@ -25,6 +26,7 @@ class JobStore:
         progress: int = None,
         message: str = None,
         study_kit: Any = None,
+        translations: Dict[str, Any] = None,
         error: str = None,
         raw_error: str = None,
         error_code: str = None,
@@ -46,6 +48,9 @@ class JobStore:
         if study_kit is not None:
             self.jobs[job_id]["study_kit"] = study_kit
 
+        if translations is not None:
+            self.jobs[job_id]["translations"] = translations
+
         if error is not None:
             self.jobs[job_id]["error"] = error
 
@@ -60,6 +65,21 @@ class JobStore:
 
         if embeddings is not None:
             self.jobs[job_id]["embeddings"] = embeddings
+
+    def add_translation(self, job_id: str, language: str, translated_study_kit: Any):
+        if job_id not in self.jobs:
+            return
+
+        if "translations" not in self.jobs[job_id]:
+            self.jobs[job_id]["translations"] = {}
+
+        self.jobs[job_id]["translations"][language] = translated_study_kit
+
+    def get_translation(self, job_id: str, language: str):
+        if job_id not in self.jobs:
+            return None
+
+        return self.jobs[job_id].get("translations", {}).get(language)
 
     def get_job(self, job_id: str):
         return self.jobs.get(job_id)

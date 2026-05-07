@@ -1,21 +1,7 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
-async function parseResponse(response) {
-  const data = await response.json().catch(() => null);
-
-  if (!response.ok) {
-    const message =
-      data?.detail?.message ||
-      data?.detail ||
-      data?.error ||
-      "Request failed";
-    throw new Error(typeof message === "string" ? message : JSON.stringify(message));
-  }
-
-  return data;
-}
-
-export async function processVideo({ youtubeUrl, targetLanguage }) {
+export async function processVideo(youtubeUrl) {
   const response = await fetch(`${API_BASE_URL}/process-video`, {
     method: "POST",
     headers: {
@@ -23,24 +9,65 @@ export async function processVideo({ youtubeUrl, targetLanguage }) {
     },
     body: JSON.stringify({
       youtube_url: youtubeUrl,
-      target_language: targetLanguage || "English",
+      target_language: "English",
     }),
   });
 
-  return parseResponse(response);
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || "Failed to process video");
+  }
+
+  return response.json();
 }
 
 export async function getJobStatus(jobId) {
   const response = await fetch(`${API_BASE_URL}/job-status/${jobId}`);
-  return parseResponse(response);
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || "Failed to get job status");
+  }
+
+  return response.json();
 }
 
 export async function getStudyKit(jobId) {
   const response = await fetch(`${API_BASE_URL}/study-kit/${jobId}`);
-  return parseResponse(response);
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail?.message || error.detail || "Failed to get study kit");
+  }
+
+  return response.json();
 }
 
-export async function searchStudyKit({ jobId, query, topK = 5 }) {
+export async function translateStudyKit(jobId, targetLanguage) {
+  const response = await fetch(`${API_BASE_URL}/translate-study-kit`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      job_id: jobId,
+      target_language: targetLanguage,
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(
+      error.detail?.message ||
+        error.detail ||
+        "Failed to translate study kit"
+    );
+  }
+
+  return response.json();
+}
+
+export async function searchStudyKit(jobId, query, topK = 5) {
   const response = await fetch(`${API_BASE_URL}/search`, {
     method: "POST",
     headers: {
@@ -53,5 +80,10 @@ export async function searchStudyKit({ jobId, query, topK = 5 }) {
     }),
   });
 
-  return parseResponse(response);
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || "Search failed");
+  }
+
+  return response.json();
 }

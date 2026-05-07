@@ -1,29 +1,5 @@
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 from pydantic import BaseModel
-
-
-class ProcessVideoRequest(BaseModel):
-    youtube_url: str
-    target_language: Optional[str] = "English"
-
-
-class ProcessTranscriptRequest(BaseModel):
-    lecture_title: Optional[str] = "Untitled Lecture"
-    transcript: str
-    target_language: Optional[str] = "English"
-
-
-class ProcessVideoResponse(BaseModel):
-    job_id: str
-    status: str
-    message: str
-
-
-class JobStatusResponse(BaseModel):
-    job_id: str
-    status: str
-    progress: int
-    message: str
 
 
 class TranscriptChunk(BaseModel):
@@ -50,13 +26,7 @@ class KeyConcept(BaseModel):
     timestamp_time: Optional[str] = None
 
 
-class LectureAnalysis(BaseModel):
-    title: str
-    outline: List[OutlineItem]
-    key_concepts: List[KeyConcept]
-
-
-class SummarySet(BaseModel):
+class Summaries(BaseModel):
     short_summary: str
     medium_summary: str
     full_summary: str
@@ -78,12 +48,18 @@ class ConceptMapNode(BaseModel):
 class ConceptMapEdge(BaseModel):
     source: str
     target: str
-    label: str
+    label: Optional[str] = None
 
 
 class ConceptMap(BaseModel):
     nodes: List[ConceptMapNode]
     edges: List[ConceptMapEdge]
+
+
+class LectureAnalysis(BaseModel):
+    title: str
+    outline: List[OutlineItem]
+    key_concepts: List[KeyConcept]
 
 
 class StudyKit(BaseModel):
@@ -93,10 +69,32 @@ class StudyKit(BaseModel):
     transcript_chunks: List[TranscriptChunk]
     outline: List[OutlineItem]
     key_concepts: List[KeyConcept]
-    summaries: SummarySet
+    summaries: Summaries
     flashcards: List[Flashcard]
     concept_map: ConceptMap
-    bilingual_output: Optional[Dict[str, Any]] = None
+    bilingual_output: Optional[dict] = None
+
+
+class ProcessVideoRequest(BaseModel):
+    youtube_url: str
+    target_language: Optional[str] = "English"
+
+
+class ProcessTranscriptRequest(BaseModel):
+    lecture_title: str
+    transcript: str
+    target_language: Optional[str] = "English"
+
+
+class ProcessVideoResponse(BaseModel):
+    job_id: str
+    status: str
+    message: str
+
+
+class TranslateStudyKitRequest(BaseModel):
+    job_id: str
+    target_language: str
 
 
 class SearchRequest(BaseModel):
