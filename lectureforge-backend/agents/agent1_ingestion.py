@@ -6,6 +6,7 @@ import subprocess
 from typing import List, Optional
 from urllib.parse import urlparse, parse_qs
 
+import requests
 from openai import OpenAI
 from dotenv import load_dotenv
 from youtube_transcript_api import YouTubeTranscriptApi
@@ -23,10 +24,22 @@ class Agent1Ingestion:
         errors = []
 
         try:
+            chunks = self._get_supadata_transcript(youtube_url)
+            if chunks and len(chunks) > 3:
+                print(f"Supadata transcript extraction succeeded with {len(chunks)} chunks")
+                return merge_small_chunks(chunks)
+
+            errors.append("Supadata returned too few chunks")
+        except Exception as e:
+            errors.append(f"Supadata failed: {str(e)}")
+            print(f"Supadata failed: {str(e)}")
+
+        try:
             chunks = self._get_transcript_api_captions(youtube_url)
             if chunks and len(chunks) > 3:
                 print(f"youtube-transcript-api succeeded with {len(chunks)} chunks")
                 return merge_small_chunks(chunks)
+
             errors.append("youtube-transcript-api returned too few chunks")
         except Exception as e:
             errors.append(f"youtube-transcript-api failed: {str(e)}")
@@ -37,6 +50,7 @@ class Agent1Ingestion:
             if chunks and len(chunks) > 3:
                 print(f"yt-dlp caption extraction succeeded with {len(chunks)} chunks")
                 return merge_small_chunks(chunks)
+
             errors.append("yt-dlp captions returned too few chunks")
         except Exception as e:
             errors.append(f"yt-dlp captions failed: {str(e)}")
@@ -47,6 +61,7 @@ class Agent1Ingestion:
             if chunks and len(chunks) > 0:
                 print(f"Whisper transcription succeeded with {len(chunks)} chunks")
                 return merge_small_chunks(chunks)
+
             errors.append("Whisper returned no chunks")
         except Exception as e:
             errors.append(f"Whisper fallback failed: {str(e)}")
@@ -54,10 +69,66 @@ class Agent1Ingestion:
 
         raise RuntimeError(
             "Could not extract transcript from this YouTube URL. "
-            "This can happen when YouTube blocks automated caption/audio access. "
             "Errors: "
             + " | ".join(errors)
         )
+
+    def _get_supadata_transcript(self, youtube_url: str) -> List[TranscriptChunk]:
+        api_key = os.getenv("SUPADATA_API_KEY")
+
+        if not api_key:
+            raise RuntimeError("SUPADATA_API_KEY is not configured")
+
+        endpoint = "https://api.supadata.ai/v1/transcript"
+
+        response = requests.get(
+            endpoint,
+            params={"url": youtube_url},
+            headers={"x-api-key": api_key},
+            timeout=60,
+        )
+
+        if response.status_code != 200:
+            raise RuntimeError(
+                f"Supadata request failed with status {response.status_code}: {response.text}"
+            )
+
+        data = response.json()
+
+        content = data.get("content")
+
+        if not content:
+            raise RuntimeError("Supadata returned no transcript content")
+
+        chunks = []
+
+        for item in content:
+            text = clean_text(item.get("text", ""))
+
+            if not text:
+                continue
+
+            offset_ms = item.get("offset", 0)
+            duration_ms = item.get("duration", 0)
+
+            start = float(offset_ms) / 1000
+            end = float(offset_ms + duration_ms) / 1000
+
+            if end <= start:
+                end = start + 2
+
+            chunks.append(
+                TranscriptChunk(
+                    start=start,
+                    end=end,
+                    text=text,
+                )
+            )
+
+        if not chunks:
+            raise RuntimeError("Supadata transcript content had no usable text")
+
+        return chunks
 
     def _extract_video_id(self, youtube_url: str) -> str:
         parsed = urlparse(youtube_url)
@@ -67,6 +138,7 @@ class Agent1Ingestion:
 
         if parsed.hostname in ["youtube.com", "www.youtube.com", "m.youtube.com"]:
             query = parse_qs(parsed.query)
+
             if "v" in query:
                 return query["v"][0]
 
@@ -128,7 +200,9 @@ class Agent1Ingestion:
 
             except Exception as e:
                 raise RuntimeError(
-                    f"Transcript API could not fetch captions. Last direct fetch error: {last_error}. List/fetch error: {e}"
+                    f"Transcript API could not fetch captions. "
+                    f"Last direct fetch error: {last_error}. "
+                    f"List/fetch error: {e}"
                 )
 
         chunks = []

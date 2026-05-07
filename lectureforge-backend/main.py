@@ -398,6 +398,65 @@ def cosine_similarity(a, b) -> float:
 def build_public_error_message(raw_error: str):
     lower_error = raw_error.lower()
 
+    if "supadata request failed" in lower_error:
+        return {
+            "error_code": "SUPADATA_TRANSCRIPT_ERROR",
+            "message": (
+                "The hosted transcript service could not extract this video transcript. "
+                "Try another public lecture URL."
+            ),
+            "can_continue_with_transcript": True,
+            "raw_error": raw_error,
+        }
+
+    if "supadata_api_key is not configured" in lower_error:
+        return {
+            "error_code": "SUPADATA_CONFIG_ERROR",
+            "message": (
+                "SUPADATA_API_KEY is not configured in the backend environment variables."
+            ),
+            "can_continue_with_transcript": False,
+            "raw_error": raw_error,
+        }
+
+    if (
+        "youtube is blocking requests from your ip" in lower_error
+        or "sign in to confirm" in lower_error
+        or "not a bot" in lower_error
+        or "cloud provider" in lower_error
+        or ("http error 429" in lower_error and "youtube" in lower_error)
+        or ("too many requests" in lower_error and "youtube" in lower_error)
+    ):
+        return {
+            "error_code": "YOUTUBE_CLOUD_IP_BLOCKED",
+            "message": (
+                "YouTube blocked transcript extraction from the deployed server. "
+                "This often happens on cloud-hosted IPs."
+            ),
+            "can_continue_with_transcript": True,
+            "raw_error": raw_error,
+        }
+
+    if "http error 403" in lower_error or "forbidden" in lower_error:
+        return {
+            "error_code": "YOUTUBE_ACCESS_BLOCKED",
+            "message": (
+                "YouTube blocked automated access to this video. Try a different public lecture URL."
+            ),
+            "can_continue_with_transcript": True,
+            "raw_error": raw_error,
+        }
+
+    if "no captions" in lower_error or "no transcript" in lower_error:
+        return {
+            "error_code": "NO_TRANSCRIPT_AVAILABLE",
+            "message": (
+                "No accessible captions were found for this YouTube video. Try another video with captions."
+            ),
+            "can_continue_with_transcript": True,
+            "raw_error": raw_error,
+        }
+
     if "insufficient_quota" in lower_error or "exceeded your current quota" in lower_error:
         return {
             "error_code": "OPENAI_QUOTA_ERROR",
@@ -408,7 +467,7 @@ def build_public_error_message(raw_error: str):
             "raw_error": raw_error,
         }
 
-    if "rate_limit" in lower_error or "429" in lower_error:
+    if "rate_limit" in lower_error or ("openai" in lower_error and "429" in lower_error):
         return {
             "error_code": "OPENAI_RATE_LIMIT",
             "message": (
@@ -455,26 +514,6 @@ def build_public_error_message(raw_error: str):
                 "The model returned an invalid structured response. Please retry the request."
             ),
             "can_continue_with_transcript": False,
-            "raw_error": raw_error,
-        }
-
-    if "http error 403" in lower_error or "forbidden" in lower_error:
-        return {
-            "error_code": "YOUTUBE_ACCESS_BLOCKED",
-            "message": (
-                "YouTube blocked automated access to this video. Try a different public lecture URL."
-            ),
-            "can_continue_with_transcript": True,
-            "raw_error": raw_error,
-        }
-
-    if "no captions" in lower_error or "no transcript" in lower_error:
-        return {
-            "error_code": "NO_TRANSCRIPT_AVAILABLE",
-            "message": (
-                "No accessible captions were found for this YouTube video. Try another video with captions."
-            ),
-            "can_continue_with_transcript": True,
             "raw_error": raw_error,
         }
 
