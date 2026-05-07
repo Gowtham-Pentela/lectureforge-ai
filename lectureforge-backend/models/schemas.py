@@ -32,6 +32,11 @@ class Summaries(BaseModel):
     full_summary: str
 
 
+# Backward-compatible name used by agents/agent3_study.py
+class SummarySet(Summaries):
+    pass
+
+
 class Flashcard(BaseModel):
     question: str
     answer: str
@@ -69,7 +74,7 @@ class StudyKit(BaseModel):
     transcript_chunks: List[TranscriptChunk]
     outline: List[OutlineItem]
     key_concepts: List[KeyConcept]
-    summaries: Summaries
+    summaries: SummarySet
     flashcards: List[Flashcard]
     concept_map: ConceptMap
     bilingual_output: Optional[dict] = None
