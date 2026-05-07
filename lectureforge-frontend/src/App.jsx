@@ -16,11 +16,8 @@ export default function App() {
   const [englishStudyKit, setEnglishStudyKit] = useState(null);
   const [selectedLanguage, setSelectedLanguage] = useState("English");
 
-  const [status, setStatus] = useState("idle");
-  const [progress, setProgress] = useState(0);
-  const [message, setMessage] = useState("");
+  const [jobStatus, setJobStatus] = useState(null);
   const [error, setError] = useState("");
-
   const [isTranslating, setIsTranslating] = useState(false);
 
   async function handleProcessVideo(youtubeUrl) {
@@ -30,20 +27,41 @@ export default function App() {
       setEnglishStudyKit(null);
       setSelectedLanguage("English");
       setJobId(null);
-      setStatus("queued");
-      setProgress(0);
-      setMessage("Starting video processing");
+
+      const initialStatus = {
+        status: "queued",
+        progress: 0,
+        message: "Starting video processing",
+        error: null,
+        can_continue_with_transcript: false,
+      };
+
+      setJobStatus(initialStatus);
 
       const response = await processVideo(youtubeUrl);
       const newJobId = response.job_id;
 
       setJobId(newJobId);
-      setStatus(response.status);
-      setMessage(response.message || "Video processing started");
+
+      setJobStatus({
+        status: response.status || "queued",
+        progress: 0,
+        message: response.message || "Video processing started",
+        error: null,
+        can_continue_with_transcript: false,
+      });
 
       pollJobStatus(newJobId);
     } catch (err) {
-      setStatus("failed");
+      const failedStatus = {
+        status: "failed",
+        progress: 100,
+        message: "Processing failed",
+        error: err.message || "Failed to process video",
+        can_continue_with_transcript: false,
+      };
+
+      setJobStatus(failedStatus);
       setError(err.message || "Failed to process video");
     }
   }
@@ -58,9 +76,15 @@ export default function App() {
 
         const job = await getJobStatus(newJobId);
 
-        setStatus(job.status);
-        setProgress(job.progress || 0);
-        setMessage(job.message || "");
+        setJobStatus({
+          status: job.status,
+          progress: job.progress || 0,
+          message: job.message || "",
+          error: job.error || null,
+          error_code: job.error_code || null,
+          can_continue_with_transcript:
+            job.can_continue_with_transcript || false,
+        });
 
         if (job.status === "completed") {
           clearInterval(intervalId);
@@ -71,26 +95,51 @@ export default function App() {
           setEnglishStudyKit(kit);
           setStudyKit(kit);
           setSelectedLanguage("English");
-          setProgress(100);
-          setMessage("Study kit ready");
-          setStatus("completed");
+
+          setJobStatus({
+            status: "completed",
+            progress: 100,
+            message: "Study kit ready",
+            error: null,
+            can_continue_with_transcript: false,
+          });
         }
 
         if (job.status === "failed") {
           clearInterval(intervalId);
-          setStatus("failed");
           setError(job.error || "Processing failed");
         }
 
         if (attempts >= maxAttempts) {
           clearInterval(intervalId);
-          setStatus("failed");
-          setError("Processing took too long. Please try a shorter lecture.");
+
+          const timeoutMessage =
+            "Processing took too long. Please try a shorter lecture.";
+
+          setJobStatus({
+            status: "failed",
+            progress: 100,
+            message: "Processing timed out",
+            error: timeoutMessage,
+            can_continue_with_transcript: false,
+          });
+
+          setError(timeoutMessage);
         }
       } catch (err) {
         clearInterval(intervalId);
-        setStatus("failed");
-        setError(err.message || "Failed to check job status");
+
+        const message = err.message || "Failed to check job status";
+
+        setJobStatus({
+          status: "failed",
+          progress: 100,
+          message: "Processing failed",
+          error: message,
+          can_continue_with_transcript: false,
+        });
+
+        setError(message);
       }
     }, 2500);
   }
@@ -121,6 +170,9 @@ export default function App() {
     }
   }
 
+  const isProcessing =
+    jobStatus?.status === "queued" || jobStatus?.status === "processing";
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <Header />
@@ -146,20 +198,21 @@ export default function App() {
 
             <VideoForm
               onSubmit={handleProcessVideo}
-              disabled={status === "processing" || status === "queued"}
+              disabled={isProcessing || isTranslating}
             />
           </div>
         </section>
 
-        {(status === "queued" || status === "processing") && (
-          <ProgressCard
-            status={status}
-            progress={progress}
-            message={message}
-          />
-        )}
+        {jobStatus &&
+          (jobStatus.status === "queued" ||
+            jobStatus.status === "processing" ||
+            jobStatus.status === "failed") && (
+            <div className="mb-6">
+              <ProgressCard status={jobStatus} />
+            </div>
+          )}
 
-        {error && (
+        {error && jobStatus?.status !== "failed" && (
           <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {error}
           </div>

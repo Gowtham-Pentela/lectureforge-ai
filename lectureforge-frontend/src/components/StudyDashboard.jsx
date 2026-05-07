@@ -6,15 +6,7 @@ import FlashcardsTab from "./FlashcardsTab";
 import ConceptMapTab from "./ConceptMapTab";
 import SearchTab from "./SearchTab";
 import TranscriptTab from "./TranscriptTab";
-
-const tabs = [
-  { id: "outline", label: "Outline" },
-  { id: "summaries", label: "Summaries" },
-  { id: "flashcards", label: "Flashcards" },
-  { id: "concept-map", label: "Concept Map" },
-  { id: "search", label: "Search" },
-  { id: "transcript", label: "Transcript" },
-];
+import { Clock3, Layers3 } from "lucide-react";
 
 const languages = [
   "English",
@@ -35,50 +27,18 @@ export default function StudyDashboard({
 }) {
   const [activeTab, setActiveTab] = useState("outline");
 
-  function renderActiveTab() {
-    if (activeTab === "outline") {
-      return <OutlineTab outline={studyKit.outline || []} />;
-    }
-
-    if (activeTab === "summaries") {
-      return <SummariesTab summaries={studyKit.summaries} />;
-    }
-
-    if (activeTab === "flashcards") {
-      return <FlashcardsTab flashcards={studyKit.flashcards || []} />;
-    }
-
-    if (activeTab === "concept-map") {
-      return <ConceptMapTab conceptMap={studyKit.concept_map} />;
-    }
-
-    if (activeTab === "search") {
-      return <SearchTab jobId={jobId} />;
-    }
-
-    if (activeTab === "transcript") {
-      return <TranscriptTab transcriptChunks={studyKit.transcript_chunks || []} />;
-    }
-
-    return null;
-  }
-
   return (
-    <section className="space-y-6">
-      <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+    <main className="mt-8">
+      <section className="mb-5 rounded-[2rem] border border-slate-200 bg-white p-5 shadow-soft md:p-6">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-wide text-blue-600">
-              Study Kit
+            <p className="mb-2 text-sm font-semibold uppercase tracking-wide text-blue-600">
+              Generated study kit
             </p>
 
-            <h2 className="mt-2 text-2xl font-bold text-slate-950">
+            <h2 className="text-2xl font-bold text-slate-950 md:text-3xl">
               {studyKit.lecture_title || "Generated Study Kit"}
             </h2>
-
-            <p className="mt-2 text-sm text-slate-600">
-              Duration: {studyKit.duration_time || "Unknown"}
-            </p>
 
             <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">
               The lecture is processed once in English. Use the display language
@@ -87,11 +47,23 @@ export default function StudyDashboard({
             </p>
 
             {studyKit.bilingual_output?.target_language && (
-              <p className="mt-2 text-sm font-medium text-blue-700">
+              <p className="mt-2 text-sm font-semibold text-blue-700">
                 Displaying translated study kit in{" "}
                 {studyKit.bilingual_output.target_language}
               </p>
             )}
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700">
+                <Clock3 size={16} />
+                {studyKit.duration_time || "Unknown duration"}
+              </div>
+
+              <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700">
+                <Layers3 size={16} />
+                {studyKit.transcript_chunks?.length || 0} chunks
+              </div>
+            </div>
           </div>
 
           <div className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 lg:w-80">
@@ -120,19 +92,33 @@ export default function StudyDashboard({
         </div>
 
         {isTranslating && (
-          <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-medium text-blue-700">
+          <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700">
             Translating study kit into {selectedLanguage}...
           </div>
         )}
-      </div>
+      </section>
 
-      <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-        <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
+      <Tabs activeTab={activeTab} setActiveTab={setActiveTab} />
 
-        <div className="mt-6">
-          {renderActiveTab()}
-        </div>
-      </div>
-    </section>
+      {activeTab === "outline" && <OutlineTab outline={studyKit.outline || []} />}
+
+      {activeTab === "summaries" && (
+        <SummariesTab summaries={studyKit.summaries} />
+      )}
+
+      {activeTab === "flashcards" && (
+        <FlashcardsTab flashcards={studyKit.flashcards || []} />
+      )}
+
+      {activeTab === "concept-map" && (
+        <ConceptMapTab conceptMap={studyKit.concept_map} />
+      )}
+
+      {activeTab === "search" && <SearchTab jobId={jobId} />}
+
+      {activeTab === "transcript" && (
+        <TranscriptTab chunks={studyKit.transcript_chunks || []} />
+      )}
+    </main>
   );
 }
