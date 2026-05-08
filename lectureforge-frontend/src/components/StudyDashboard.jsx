@@ -25,6 +25,7 @@ export default function StudyDashboard({
   selectedLanguage,
   onLanguageChange,
   isTranslating,
+  translationProgress = {},
 }) {
   const [activeTab, setActiveTab] = useState("outline");
 
@@ -43,8 +44,8 @@ export default function StudyDashboard({
 
             <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">
               The lecture is processed once in English. Use the display language
-              selector to translate the generated learning material without
-              reprocessing the video.
+              selector to translate the generated learning material section by
+              section without reprocessing the video.
             </p>
 
             {studyKit.bilingual_output?.target_language && (
@@ -86,9 +87,20 @@ export default function StudyDashboard({
             </select>
 
             <p className="mt-2 text-xs leading-5 text-slate-500">
-              Translation updates the generated study kit only. Transcript and
-              semantic search remain based on the original English processing.
+              Translation updates the generated study kit, transcript display,
+              and search result display. The original semantic index remains
+              English-based for accuracy.
             </p>
+
+            {selectedLanguage !== "English" && (
+              <div className="mt-4 space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Translation progress
+                </p>
+
+                <TranslationProgressList progress={translationProgress} />
+              </div>
+            )}
           </div>
         </div>
 
@@ -113,18 +125,96 @@ export default function StudyDashboard({
       )}
 
       {activeTab === "flashcards" && (
-        <FlashcardsTab flashcards={studyKit.flashcards || []} />
+        <FlashcardsTab
+          flashcards={studyKit.flashcards || []}
+          sourceVideoUrl={sourceVideoUrl}
+        />
       )}
 
       {activeTab === "concept-map" && (
         <ConceptMapTab conceptMap={studyKit.concept_map} />
       )}
 
-      {activeTab === "search" && <SearchTab jobId={jobId} />}
+      {activeTab === "search" && (
+        <SearchTab
+          jobId={jobId}
+          selectedLanguage={selectedLanguage}
+          sourceVideoUrl={sourceVideoUrl}
+        />
+      )}
 
       {activeTab === "transcript" && (
         <TranscriptTab chunks={studyKit.transcript_chunks || []} />
       )}
     </main>
   );
+}
+
+function TranslationProgressList({ progress }) {
+  const labels = {
+    lecture_title: "Title",
+    outline: "Outline",
+    summaries: "Summaries",
+    key_concepts: "Key Concepts",
+    flashcards: "Flashcards",
+    concept_map: "Concept Map",
+    transcript_chunks: "Transcript",
+  };
+
+  return (
+    <div className="space-y-1">
+      {Object.entries(labels).map(([key, label]) => {
+        const status = progress[key] || "waiting";
+
+        return (
+          <div
+            key={key}
+            className="flex items-center justify-between rounded-xl bg-white px-3 py-2 text-xs"
+          >
+            <span className="font-medium text-slate-700">{label}</span>
+
+            <span className={getTranslationStatusClass(status)}>
+              {formatTranslationStatus(status)}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function formatTranslationStatus(status) {
+  if (!status || status === "waiting") {
+    return "Waiting";
+  }
+
+  if (status === "translating") {
+    return "Translating";
+  }
+
+  if (status === "done") {
+    return "Done";
+  }
+
+  if (status === "cached") {
+    return "Cached";
+  }
+
+  return status;
+}
+
+function getTranslationStatusClass(status) {
+  if (status === "done" || status === "cached") {
+    return "font-semibold text-emerald-700";
+  }
+
+  if (status === "translating") {
+    return "font-semibold text-blue-700";
+  }
+
+  if (typeof status === "string" && status.includes("/")) {
+    return "font-semibold text-blue-700";
+  }
+
+  return "font-medium text-slate-500";
 }
