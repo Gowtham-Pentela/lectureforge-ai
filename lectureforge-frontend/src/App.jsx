@@ -7,7 +7,7 @@ import {
   processVideo,
   getJobStatus,
   getStudyKit,
-  translateStudyKit,
+  translateSection,
 } from "./lib/api";
 
 export default function App() {
@@ -20,6 +20,7 @@ export default function App() {
   const [jobStatus, setJobStatus] = useState(null);
   const [error, setError] = useState("");
   const [isTranslating, setIsTranslating] = useState(false);
+  const [translationProgress, setTranslationProgress] = useState({});
 
   async function handleProcessVideo(youtubeUrl) {
     try {
@@ -28,6 +29,7 @@ export default function App() {
       setStudyKit(null);
       setEnglishStudyKit(null);
       setSelectedLanguage("English");
+      setTranslationProgress({});
       setJobId(null);
 
       const initialStatus = {
@@ -97,6 +99,7 @@ export default function App() {
           setEnglishStudyKit(kit);
           setStudyKit(kit);
           setSelectedLanguage("English");
+          setTranslationProgress({});
 
           setJobStatus({
             status: "completed",
@@ -155,21 +158,147 @@ export default function App() {
 
     if (language === "English") {
       setStudyKit(englishStudyKit);
+      setTranslationProgress({});
+      setIsTranslating(false);
+      setError("");
       return;
     }
 
+    const baseTranslatedKit = structuredCloneSafe(englishStudyKit);
+
+    baseTranslatedKit.bilingual_output = {
+      source_language: "English",
+      target_language: language,
+    };
+
+    setStudyKit(baseTranslatedKit);
+    setIsTranslating(true);
+    setError("");
+
+    const initialProgress = {
+      lecture_title: "waiting",
+      outline: "waiting",
+      summaries: "waiting",
+      key_concepts: "waiting",
+      flashcards: "waiting",
+      concept_map: "waiting",
+      transcript_chunks: "waiting",
+    };
+
+    setTranslationProgress(initialProgress);
+
     try {
-      setIsTranslating(true);
-      setError("");
+      const orderedSections = [
+        "lecture_title",
+        "outline",
+        "summaries",
+        "key_concepts",
+        "flashcards",
+        "concept_map",
+      ];
 
-      const translatedKit = await translateStudyKit(jobId, language);
+      for (const section of orderedSections) {
+        setTranslationProgress((previous) => ({
+          ...previous,
+          [section]: "translating",
+        }));
 
-      setStudyKit(translatedKit);
-    } catch (err) {
-      setError(err.message || "Translation failed");
-    } finally {
+        const translated = await translateSection({
+          jobId,
+          targetLanguage: language,
+          section,
+        });
+
+        const normalizedData = normalizeTranslatedSectionData(
+          section,
+          translated.data
+        );
+
+        setStudyKit((previousKit) => ({
+          ...previousKit,
+          [section]: normalizedData,
+          bilingual_output: {
+            source_language: "English",
+            target_language: language,
+          },
+        }));
+
+        setTranslationProgress((previous) => ({
+          ...previous,
+          [section]: translated.cached ? "cached" : "done",
+        }));
+      }
+
+      await translateTranscriptInBatches(language);
+
       setIsTranslating(false);
+    } catch (err) {
+      setIsTranslating(false);
+      setError(err.message || "Translation failed");
     }
+  }
+
+  async function translateTranscriptInBatches(language) {
+    const batchSize = 5;
+    const totalChunks = englishStudyKit?.transcript_chunks?.length || 0;
+
+    if (!totalChunks) {
+      setTranslationProgress((previous) => ({
+        ...previous,
+        transcript_chunks: "done",
+      }));
+
+      return;
+    }
+
+    setTranslationProgress((previous) => ({
+      ...previous,
+      transcript_chunks: `0/${totalChunks}`,
+    }));
+
+    const translatedTranscriptChunks = [];
+
+    for (let batchStart = 0; batchStart < totalChunks; batchStart += batchSize) {
+      const translated = await translateSection({
+        jobId,
+        targetLanguage: language,
+        section: "transcript_chunks",
+        batchStart,
+        batchSize,
+      });
+
+      const normalizedTranscriptData = normalizeTranslatedSectionData(
+        "transcript_chunks",
+        translated.data
+      );
+
+      const batchData = Array.isArray(normalizedTranscriptData)
+        ? normalizedTranscriptData
+        : [];
+
+      translatedTranscriptChunks.push(...batchData);
+
+      setStudyKit((previousKit) => ({
+        ...previousKit,
+        transcript_chunks: [...translatedTranscriptChunks],
+        bilingual_output: {
+          source_language: "English",
+          target_language: language,
+        },
+      }));
+
+      const completed = Math.min(batchStart + batchSize, totalChunks);
+
+      setTranslationProgress((previous) => ({
+        ...previous,
+        transcript_chunks: `${completed}/${totalChunks}`,
+      }));
+    }
+
+    setTranslationProgress((previous) => ({
+      ...previous,
+      transcript_chunks: "done",
+    }));
   }
 
   const isProcessing =
@@ -193,8 +322,9 @@ export default function App() {
 
               <p className="mt-3 max-w-3xl text-base leading-7 text-slate-600">
                 Paste a YouTube lecture URL. LectureForge processes the video
-                once in English, then lets you translate the generated study
-                material without reprocessing the video.
+                once in English, then progressively translates the generated
+                study material section by section without reprocessing the
+                video.
               </p>
             </div>
 
@@ -228,9 +358,94 @@ export default function App() {
             selectedLanguage={selectedLanguage}
             onLanguageChange={handleLanguageChange}
             isTranslating={isTranslating}
+            translationProgress={translationProgress}
           />
         )}
       </main>
     </div>
   );
+}
+
+function structuredCloneSafe(value) {
+  if (typeof structuredClone === "function") {
+    return structuredClone(value);
+  }
+
+  return JSON.parse(JSON.stringify(value));
+}
+
+function normalizeTranslatedSectionData(section, data) {
+  if (section === "lecture_title") {
+    if (typeof data === "string") {
+      return data;
+    }
+
+    if (
+      data &&
+      typeof data === "object" &&
+      typeof data.lecture_title === "string"
+    ) {
+      return data.lecture_title;
+    }
+
+    return "Generated Study Kit";
+  }
+
+  if (section === "summaries") {
+    if (data && typeof data === "object" && data.summaries) {
+      return data.summaries;
+    }
+
+    return data;
+  }
+
+  if (section === "outline") {
+    if (data && typeof data === "object" && Array.isArray(data.outline)) {
+      return data.outline;
+    }
+
+    return data;
+  }
+
+  if (section === "key_concepts") {
+    if (
+      data &&
+      typeof data === "object" &&
+      Array.isArray(data.key_concepts)
+    ) {
+      return data.key_concepts;
+    }
+
+    return data;
+  }
+
+  if (section === "flashcards") {
+    if (data && typeof data === "object" && Array.isArray(data.flashcards)) {
+      return data.flashcards;
+    }
+
+    return data;
+  }
+
+  if (section === "concept_map") {
+    if (data && typeof data === "object" && data.concept_map) {
+      return data.concept_map;
+    }
+
+    return data;
+  }
+
+  if (section === "transcript_chunks") {
+    if (
+      data &&
+      typeof data === "object" &&
+      Array.isArray(data.transcript_chunks)
+    ) {
+      return data.transcript_chunks;
+    }
+
+    return data;
+  }
+
+  return data;
 }

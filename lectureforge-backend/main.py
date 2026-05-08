@@ -16,6 +16,7 @@ from models.schemas import (
     SearchResult,
     LectureAnalysis,
     TranslateStudyKitRequest,
+    TranslateSectionRequest,
 )
 
 from services.job_store import JobStore
@@ -316,7 +317,10 @@ def get_study_kit(job_id: str):
                 "message": job.get("error", "Unknown error"),
                 "raw_error": job.get("raw_error"),
                 "error_code": job.get("error_code"),
-                "can_continue_with_transcript": job.get("can_continue_with_transcript", False),
+                "can_continue_with_transcript": job.get(
+                    "can_continue_with_transcript",
+                    False,
+                ),
             },
         )
 
@@ -381,6 +385,96 @@ def translate_study_kit(request: TranslateStudyKitRequest):
             },
         )
 
+@app.post("/translate-section")
+def translate_section(request: TranslateSectionRequest):
+    job = job_store.get_job(request.job_id)
+
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if job["status"] != "completed":
+        raise HTTPException(
+            status_code=400,
+            detail="Study kit is not ready yet",
+        )
+
+    target_language = request.target_language.strip()
+    section = request.section.strip()
+
+    if not target_language or target_language == "English":
+        return {
+            "language": "English",
+            "section": section,
+            "data": get_original_section_data(
+                study_kit=job["study_kit"],
+                section=section,
+                batch_start=request.batch_start or 0,
+                batch_size=request.batch_size or 5,
+            ),
+            "cached": True,
+            "is_complete": True,
+        }
+
+    section_key = build_translation_section_key(
+        section=section,
+        batch_start=request.batch_start or 0,
+        batch_size=request.batch_size or 5,
+    )
+
+    cached_section = job_store.get_translation_section(
+        job_id=request.job_id,
+        language=target_language,
+        section_key=section_key,
+    )
+
+    if cached_section is not None:
+        return {
+            "language": target_language,
+            "section": section,
+            "data": cached_section.get("data"),
+            "cached": True,
+            "is_complete": cached_section.get("is_complete", True),
+            "batch_start": cached_section.get("batch_start"),
+            "batch_size": cached_section.get("batch_size"),
+        }
+
+    try:
+        translated_result = translate_study_kit_section(
+            study_kit=job["study_kit"],
+            target_language=target_language,
+            section=section,
+            batch_start=request.batch_start or 0,
+            batch_size=request.batch_size or 5,
+        )
+
+        job_store.set_translation_section(
+            job_id=request.job_id,
+            language=target_language,
+            section_key=section_key,
+            translated_data=translated_result,
+        )
+
+        return {
+            "language": target_language,
+            "section": section,
+            "data": translated_result.get("data"),
+            "cached": False,
+            "is_complete": translated_result.get("is_complete", True),
+            "batch_start": translated_result.get("batch_start"),
+            "batch_size": translated_result.get("batch_size"),
+        }
+
+    except Exception as e:
+        public_error = build_public_error_message(str(e))
+
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "message": public_error["message"],
+                "raw_error": public_error.get("raw_error"),
+                "error_code": public_error["error_code"],
+            },
+        )
 
 @app.post("/search", response_model=SearchResponse)
 def semantic_search(request: SearchRequest):
@@ -396,7 +490,10 @@ def semantic_search(request: SearchRequest):
                 "message": job.get("error", "Processing failed"),
                 "raw_error": job.get("raw_error"),
                 "error_code": job.get("error_code"),
-                "can_continue_with_transcript": job.get("can_continue_with_transcript", False),
+                "can_continue_with_transcript": job.get(
+                    "can_continue_with_transcript",
+                    False,
+                ),
             },
         )
 
@@ -414,7 +511,15 @@ def semantic_search(request: SearchRequest):
             detail="No search index found",
         )
 
-    query_embedding = create_embedding(request.query)
+    search_query = request.query
+
+    if request.target_language and request.target_language != "English":
+        search_query = translate_search_query_to_english(
+            query=request.query,
+            source_language=request.target_language,
+        )
+
+    query_embedding = create_embedding(search_query)
 
     scored_results = []
 
@@ -424,9 +529,17 @@ def semantic_search(request: SearchRequest):
 
         score = cosine_similarity(query_embedding, chunk_embedding)
 
+        result_text = chunk.text
+
+        if request.target_language and request.target_language != "English":
+            result_text = translate_short_text(
+                text=chunk.text,
+                target_language=request.target_language,
+            )
+
         scored_results.append(
             SearchResult(
-                text=chunk.text,
+                text=result_text,
                 start=chunk.start,
                 end=chunk.end,
                 start_time=format_timestamp(chunk.start),
@@ -452,6 +565,7 @@ def translate_existing_study_kit(study_kit, target_language: str):
 
     translation_payload = {
         "lecture_title": study_kit_dict.get("lecture_title"),
+        "transcript_chunks": study_kit_dict.get("transcript_chunks", []),
         "outline": study_kit_dict.get("outline", []),
         "key_concepts": study_kit_dict.get("key_concepts", []),
         "summaries": study_kit_dict.get("summaries", {}),
@@ -464,18 +578,30 @@ You are a precise educational translation assistant.
 
 Translate the provided study kit content into {target_language}.
 
-Rules:
-- Return valid JSON only.
-- Preserve the exact same JSON structure.
-- Do not change timestamps, IDs, start times, end times, scores, or numeric values.
-- Translate only human-readable text fields.
-- Do not translate technical identifiers like node ids, source ids, or target ids.
-- Keep programming terms understandable.
-- If a term is commonly used in English in programming, you may keep it in English.
+Return valid JSON only.
+
+Very important rules:
+- Preserve the exact same top-level JSON keys.
+- Preserve all timestamps exactly.
+- Preserve all numeric fields exactly.
+- Preserve all ids exactly.
+- Preserve concept_map node ids exactly.
+- Preserve concept_map edge source and target values exactly.
+- Preserve start, end, start_time, end_time, timestamp, and timestamp_time exactly.
+- Translate transcript_chunks.text.
+- Translate outline.title and outline.summary.
+- Translate key_concepts.concept and key_concepts.explanation.
+- Translate summaries.short_summary, summaries.medium_summary, and summaries.full_summary.
+- Translate flashcards.question and flashcards.answer.
+- Translate concept_map.nodes.label.
+- Translate concept_map.edges.label if present.
+- Do not translate technical identifier fields such as id, source, target, or type.
+- Keep programming words like Python, array, append, reverse, list, generator expression, and typecode understandable.
+- If a programming term is commonly used in English, keep the English term and explain naturally in {target_language}.
 """
 
     user_prompt = f"""
-Translate this study kit content into {target_language}:
+Translate this complete study kit into {target_language}:
 
 {json.dumps(translation_payload, ensure_ascii=False)}
 """
@@ -492,6 +618,11 @@ Translate this study kit content into {target_language}:
     translated_study_kit["lecture_title"] = translated_payload.get(
         "lecture_title",
         study_kit_dict.get("lecture_title"),
+    )
+
+    translated_study_kit["transcript_chunks"] = translated_payload.get(
+        "transcript_chunks",
+        study_kit_dict.get("transcript_chunks", []),
     )
 
     translated_study_kit["outline"] = translated_payload.get(
@@ -525,6 +656,50 @@ Translate this study kit content into {target_language}:
     }
 
     return translated_study_kit
+
+
+def translate_search_query_to_english(query: str, source_language: str):
+    system_prompt = """
+You translate search queries into English for semantic search.
+
+Rules:
+- Return only the translated query.
+- Do not add explanations.
+- Preserve technical terms where appropriate.
+"""
+
+    user_prompt = f"""
+Translate this search query from {source_language} to English:
+
+{query}
+"""
+
+    return generate_text(
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+    ).strip()
+
+
+def translate_short_text(text: str, target_language: str):
+    system_prompt = f"""
+You translate short lecture transcript snippets into {target_language}.
+
+Rules:
+- Return only the translated text.
+- Do not add explanations.
+- Preserve technical programming terms when appropriate.
+"""
+
+    user_prompt = f"""
+Translate this text into {target_language}:
+
+{text}
+"""
+
+    return generate_text(
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+    ).strip()
 
 
 def extract_json_from_text(text: str):
@@ -562,6 +737,141 @@ def cosine_similarity(a, b) -> float:
 
     return float(np.dot(a, b) / denominator)
 
+def build_translation_section_key(section: str, batch_start: int = 0, batch_size: int = 5):
+    if section == "transcript_chunks":
+        return f"{section}:{batch_start}:{batch_size}"
+
+    return section
+
+
+def get_study_kit_dict(study_kit):
+    return (
+        study_kit.model_dump()
+        if hasattr(study_kit, "model_dump")
+        else dict(study_kit)
+    )
+
+
+def get_original_section_data(study_kit, section: str, batch_start: int = 0, batch_size: int = 5):
+    study_kit_dict = get_study_kit_dict(study_kit)
+
+    if section == "lecture_title":
+        return study_kit_dict.get("lecture_title")
+
+    if section == "transcript_chunks":
+        chunks = study_kit_dict.get("transcript_chunks", [])
+        return chunks[batch_start : batch_start + batch_size]
+
+    if section in [
+        "outline",
+        "key_concepts",
+        "summaries",
+        "flashcards",
+        "concept_map",
+    ]:
+        return study_kit_dict.get(section)
+
+    raise ValueError(f"Unsupported translation section: {section}")
+
+
+def translate_study_kit_section(
+    study_kit,
+    target_language: str,
+    section: str,
+    batch_start: int = 0,
+    batch_size: int = 5,
+):
+    study_kit_dict = get_study_kit_dict(study_kit)
+
+    supported_sections = {
+        "lecture_title",
+        "outline",
+        "key_concepts",
+        "summaries",
+        "flashcards",
+        "concept_map",
+        "transcript_chunks",
+    }
+
+    if section not in supported_sections:
+        raise ValueError(f"Unsupported translation section: {section}")
+
+    if section == "transcript_chunks":
+        all_chunks = study_kit_dict.get("transcript_chunks", [])
+        batch = all_chunks[batch_start : batch_start + batch_size]
+
+        translated_batch = translate_json_section(
+            payload=batch,
+            target_language=target_language,
+            section=section,
+        )
+
+        is_complete = batch_start + batch_size >= len(all_chunks)
+
+        return {
+            "data": translated_batch,
+            "batch_start": batch_start,
+            "batch_size": batch_size,
+            "is_complete": is_complete,
+        }
+
+    payload = study_kit_dict.get(section)
+
+    translated_data = translate_json_section(
+        payload=payload,
+        target_language=target_language,
+        section=section,
+    )
+
+    return {
+        "data": translated_data,
+        "batch_start": None,
+        "batch_size": None,
+        "is_complete": True,
+    }
+
+
+def translate_json_section(payload, target_language: str, section: str):
+    system_prompt = f"""
+You are a precise educational translation assistant.
+
+Translate the provided JSON section into {target_language}.
+
+Return valid JSON only.
+
+Rules:
+- Preserve the exact same JSON structure.
+- Preserve all numeric values exactly.
+- Preserve timestamps exactly.
+- Preserve start, end, start_time, end_time, timestamp, and timestamp_time exactly.
+- Preserve ids exactly.
+- Preserve source and target exactly.
+- Preserve type exactly.
+- Translate only human-readable educational text fields.
+- For transcript_chunks, translate only text.
+- For outline, translate title and summary.
+- For key_concepts, translate concept and explanation.
+- For summaries, translate short_summary, medium_summary, and full_summary.
+- For flashcards, translate question and answer.
+- For concept_map, translate node labels and edge labels only.
+- Keep programming terms like Python, array, append, reverse, list, generator expression, and typecode understandable.
+- If a programming term is commonly used in English, you may keep the English term.
+"""
+
+    user_prompt = f"""
+Section name: {section}
+
+Translate this JSON section into {target_language}:
+
+{json.dumps(payload, ensure_ascii=False)}
+"""
+
+    translated_text = generate_text(
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+    )
+
+    return extract_json_from_text(translated_text)
 
 def build_public_error_message(raw_error: str):
     lower_error = raw_error.lower()
@@ -669,7 +979,8 @@ def build_public_error_message(raw_error: str):
         return {
             "error_code": "OPENAI_CONTEXT_LENGTH_ERROR",
             "message": (
-                "The lecture transcript is too long for the current model call. Use a shorter video or chunk the analysis step."
+                "The lecture transcript is too long for the current model call. "
+                "Use a shorter video or chunk the analysis step."
             ),
             "can_continue_with_transcript": True,
             "raw_error": raw_error,

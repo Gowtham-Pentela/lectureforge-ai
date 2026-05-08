@@ -37,7 +37,9 @@ export async function getStudyKit(jobId) {
 
   if (!response.ok) {
     const error = await response.json();
-    throw new Error(error.detail?.message || error.detail || "Failed to get study kit");
+    throw new Error(
+      error.detail?.message || error.detail || "Failed to get study kit"
+    );
   }
 
   return response.json();
@@ -67,7 +69,12 @@ export async function translateStudyKit(jobId, targetLanguage) {
   return response.json();
 }
 
-export async function searchStudyKit(jobId, query, topK = 5) {
+export async function searchStudyKit(
+  jobId,
+  query,
+  topK = 5,
+  targetLanguage = "English"
+) {
   const response = await fetch(`${API_BASE_URL}/search`, {
     method: "POST",
     headers: {
@@ -77,12 +84,46 @@ export async function searchStudyKit(jobId, query, topK = 5) {
       job_id: jobId,
       query,
       top_k: topK,
+      target_language: targetLanguage,
     }),
   });
 
   if (!response.ok) {
     const error = await response.json();
     throw new Error(error.detail || "Search failed");
+  }
+
+  return response.json();
+}
+
+export async function translateSection({
+  jobId,
+  targetLanguage,
+  section,
+  batchStart = 0,
+  batchSize = 5,
+}) {
+  const response = await fetch(`${API_BASE_URL}/translate-section`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      job_id: jobId,
+      target_language: targetLanguage,
+      section,
+      batch_start: batchStart,
+      batch_size: batchSize,
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(
+      error.detail?.message ||
+        error.detail ||
+        `Failed to translate ${section}`
+    );
   }
 
   return response.json();

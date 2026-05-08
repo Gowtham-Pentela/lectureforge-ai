@@ -66,6 +66,36 @@ class JobStore:
         if embeddings is not None:
             self.jobs[job_id]["embeddings"] = embeddings
 
+    def get_job(self, job_id: str):
+        return self.jobs.get(job_id)
+
+    def get_translation_section(self, job_id: str, language: str, section_key: str):
+        if job_id not in self.jobs:
+            return None
+
+        translations = self.jobs[job_id].get("translations", {})
+        language_cache = translations.get(language, {})
+
+        return language_cache.get(section_key)
+
+    def set_translation_section(
+        self,
+        job_id: str,
+        language: str,
+        section_key: str,
+        translated_data: Any,
+    ):
+        if job_id not in self.jobs:
+            return
+
+        if "translations" not in self.jobs[job_id]:
+            self.jobs[job_id]["translations"] = {}
+
+        if language not in self.jobs[job_id]["translations"]:
+            self.jobs[job_id]["translations"][language] = {}
+
+        self.jobs[job_id]["translations"][language][section_key] = translated_data
+
     def add_translation(self, job_id: str, language: str, translated_study_kit: Any):
         if job_id not in self.jobs:
             return
@@ -73,13 +103,14 @@ class JobStore:
         if "translations" not in self.jobs[job_id]:
             self.jobs[job_id]["translations"] = {}
 
-        self.jobs[job_id]["translations"][language] = translated_study_kit
+        self.jobs[job_id]["translations"][language] = {
+            "full_study_kit": translated_study_kit
+        }
 
     def get_translation(self, job_id: str, language: str):
         if job_id not in self.jobs:
             return None
 
-        return self.jobs[job_id].get("translations", {}).get(language)
+        language_cache = self.jobs[job_id].get("translations", {}).get(language, {})
 
-    def get_job(self, job_id: str):
-        return self.jobs.get(job_id)
+        return language_cache.get("full_study_kit")

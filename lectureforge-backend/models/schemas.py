@@ -32,7 +32,6 @@ class Summaries(BaseModel):
     full_summary: str
 
 
-# Backward-compatible name used by agents/agent3_study.py
 class SummarySet(Summaries):
     pass
 
@@ -101,11 +100,18 @@ class TranslateStudyKitRequest(BaseModel):
     job_id: str
     target_language: str
 
+class TranslateSectionRequest(BaseModel):
+    job_id: str
+    target_language: str
+    section: str
+    batch_start: Optional[int] = 0
+    batch_size: Optional[int] = 5
 
 class SearchRequest(BaseModel):
     job_id: str
     query: str
     top_k: int = 5
+    target_language: Optional[str] = "English"
 
 
 class SearchResult(BaseModel):
