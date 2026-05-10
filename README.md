@@ -11,6 +11,14 @@ The app supports two modes:
 2. **Faculty Audit Mode**  
    Faculty paste a lecture video link and generate a private, instructor-facing audit across pedagogy, accessibility, equity, clarity, pacing, cognitive load, and student engagement. The report includes a prioritized fix list and timestamped suggested rewrites.
 
+## Live Demo
+
+Try LectureForge AI here:
+
+```
+https://lectureforge-ai.vercel.app/ 
+```
+
 LectureForge AI is designed for students who want to study efficiently and faculty who want private, practical feedback before publishing or improving a lecture.
 
 ---
