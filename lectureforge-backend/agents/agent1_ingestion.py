@@ -419,3 +419,27 @@ class Agent1Ingestion:
             return segment.get(key, default)
 
         return getattr(segment, key, default)
+    
+    def get_video_title(self, youtube_url: str) -> str:
+        try:
+            command = [
+                "yt-dlp",
+                "--dump-json",
+                "--no-playlist",
+                youtube_url,
+            ]
+
+            result = self._run_command(command)
+
+            data = json.loads(result.stdout)
+
+            title = data.get("title")
+
+            if title:
+                return title.strip()
+
+            return "Untitled Lecture"
+
+        except Exception as e:
+            print(f"Could not extract YouTube title: {str(e)}")
+            return "Untitled Lecture"

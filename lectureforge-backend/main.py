@@ -17,6 +17,8 @@ from models.schemas import (
     LectureAnalysis,
     TranslateStudyKitRequest,
     TranslateSectionRequest,
+    FacultyAuditRequest,
+    FacultyAuditReport,
 )
 
 from services.job_store import JobStore
@@ -24,14 +26,16 @@ from services.openai_service import create_embedding, generate_text
 from agents.agent1_ingestion import Agent1Ingestion
 from agents.agent2_analysis import Agent2Analysis
 from agents.agent3_study import Agent3Study
+from agents.agent4_faculty_audit import generate_faculty_audit
 from utils.transcript_utils import plain_text_to_chunks, format_timestamp
 from utils.study_kit_validator import validate_study_kit
+from utils.faculty_audit_validator import validate_faculty_audit
 
 
 app = FastAPI(
     title="LectureForge AI Backend",
-    description="AI backend for turning YouTube lectures into student study kits",
-    version="0.1.0",
+    description="AI backend for turning YouTube lectures into student study kits and private faculty audits",
+    version="0.2.0",
 )
 
 app.add_middleware(
@@ -56,6 +60,10 @@ def root():
         "app": "LectureForge AI Backend",
         "status": "running",
         "docs": "/docs",
+        "capabilities": [
+            "student_study_kit",
+            "faculty_lecture_audit",
+        ],
     }
 
 
@@ -137,6 +145,25 @@ async def process_transcript(request: ProcessTranscriptRequest):
     )
 
 
+@app.post("/process-faculty-audit", response_model=ProcessVideoResponse)
+async def process_faculty_audit(request: FacultyAuditRequest):
+    job_id = str(uuid.uuid4())
+    job_store.create_job(job_id)
+
+    asyncio.create_task(
+        run_faculty_audit_pipeline(
+            job_id=job_id,
+            youtube_url=request.youtube_url,
+        )
+    )
+
+    return ProcessVideoResponse(
+        job_id=job_id,
+        status="queued",
+        message="Faculty audit started",
+    )
+
+
 async def run_video_processing_pipeline(
     job_id: str,
     youtube_url: str,
@@ -176,6 +203,86 @@ async def run_video_processing_pipeline(
             can_continue_with_transcript=public_error["can_continue_with_transcript"],
         )
 
+
+async def run_faculty_audit_pipeline(job_id: str, youtube_url: str):
+    try:
+        job_store.update_job(
+            job_id,
+            status="processing",
+            progress=10,
+            message="Agent 1 is extracting transcript for faculty audit",
+        )
+
+        transcript_chunks = await asyncio.to_thread(
+            agent1.get_transcript,
+            youtube_url,
+        )
+
+        if not transcript_chunks:
+            raise ValueError("No transcript chunks available for faculty audit")
+
+        job_store.update_job(
+            job_id,
+            status="processing",
+            progress=35,
+            message=f"Transcript ready with {len(transcript_chunks)} chunks. Agent 2 is identifying lecture title and structure",
+        )
+
+        analysis = await asyncio.to_thread(
+            agent2.analyze,
+            transcript_chunks,
+        )
+
+        lecture_title = (
+            analysis.title
+            if analysis and getattr(analysis, "title", None)
+            else "Untitled Lecture"
+        )
+
+        job_store.update_job(
+            job_id,
+            status="processing",
+            progress=60,
+            message=f"Lecture identified: {lecture_title}. Generating private faculty audit",
+        )
+
+        faculty_audit = await asyncio.to_thread(
+            generate_faculty_audit,
+            transcript_chunks,
+            lecture_title,
+        )
+
+        faculty_audit = validate_faculty_audit(faculty_audit)
+
+        faculty_audit_payload = (
+            faculty_audit.model_dump()
+            if hasattr(faculty_audit, "model_dump")
+            else faculty_audit.dict()
+            if hasattr(faculty_audit, "dict")
+            else faculty_audit
+        )
+
+        job_store.update_job(
+            job_id,
+            status="completed",
+            progress=100,
+            message="Faculty audit ready",
+            faculty_audit=faculty_audit_payload,
+        )
+
+    except Exception as e:
+        public_error = build_public_error_message(str(e))
+
+        job_store.update_job(
+            job_id,
+            status="failed",
+            progress=100,
+            message="Faculty audit failed",
+            error=public_error["message"],
+            raw_error=str(e),
+            error_code=public_error["error_code"],
+            can_continue_with_transcript=public_error["can_continue_with_transcript"],
+        )
 
 async def run_transcript_processing_pipeline(
     job_id: str,
@@ -333,6 +440,43 @@ def get_study_kit(job_id: str):
     return job["study_kit"]
 
 
+@app.get("/faculty-audit/{job_id}", response_model=FacultyAuditReport)
+def get_faculty_audit(job_id: str):
+    job = job_store.get_job(job_id)
+
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if job["status"] == "failed":
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "message": job.get("error", "Unknown error"),
+                "raw_error": job.get("raw_error"),
+                "error_code": job.get("error_code"),
+                "can_continue_with_transcript": job.get(
+                    "can_continue_with_transcript",
+                    False,
+                ),
+            },
+        )
+
+    if job["status"] != "completed":
+        raise HTTPException(
+            status_code=202,
+            detail="Faculty audit is not ready yet",
+        )
+
+    faculty_audit = job.get("faculty_audit")
+
+    if not faculty_audit:
+        raise HTTPException(
+            status_code=404,
+            detail="Faculty audit not found for this job",
+        )
+
+    return FacultyAuditReport(**faculty_audit) if isinstance(faculty_audit, dict) else faculty_audit
+
 @app.post("/translate-study-kit")
 def translate_study_kit(request: TranslateStudyKitRequest):
     job = job_store.get_job(request.job_id)
@@ -384,6 +528,7 @@ def translate_study_kit(request: TranslateStudyKitRequest):
                 "error_code": public_error["error_code"],
             },
         )
+
 
 @app.post("/translate-section")
 def translate_section(request: TranslateSectionRequest):
@@ -475,6 +620,7 @@ def translate_section(request: TranslateSectionRequest):
                 "error_code": public_error["error_code"],
             },
         )
+
 
 @app.post("/search", response_model=SearchResponse)
 def semantic_search(request: SearchRequest):
@@ -737,6 +883,7 @@ def cosine_similarity(a, b) -> float:
 
     return float(np.dot(a, b) / denominator)
 
+
 def build_translation_section_key(section: str, batch_start: int = 0, batch_size: int = 5):
     if section == "transcript_chunks":
         return f"{section}:{batch_start}:{batch_size}"
@@ -873,6 +1020,7 @@ Translate this JSON section into {target_language}:
 
     return extract_json_from_text(translated_text)
 
+
 def build_public_error_message(raw_error: str):
     lower_error = raw_error.lower()
 
@@ -986,15 +1134,22 @@ def build_public_error_message(raw_error: str):
             "raw_error": raw_error,
         }
 
-    if "json" in lower_error:
+    if (
+    "json" in lower_error
+    or "validation error" in lower_error
+    or "field required" in lower_error
+    or "pydantic" in lower_error
+    or "facultyauditreport" in lower_error
+):
         return {
-            "error_code": "MODEL_JSON_ERROR",
-            "message": (
-                "The model returned an invalid structured response. Please retry the request."
-            ),
-            "can_continue_with_transcript": False,
-            "raw_error": raw_error,
-        }
+        "error_code": "MODEL_SCHEMA_ERROR",
+        "message": (
+            "The model returned a faculty audit response that did not match the required structure. "
+            "Please retry, or use a shorter lecture."
+        ),
+        "can_continue_with_transcript": False,
+        "raw_error": raw_error,
+    }
 
     if "empty" in lower_error:
         return {

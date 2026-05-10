@@ -1,10 +1,17 @@
+
 # LectureForge AI
 
-LectureForge AI turns a single YouTube lecture URL into an interactive study environment for students.
+LectureForge AI turns a single YouTube lecture URL into an interactive learning and lecture-improvement workspace.
 
-A student can paste a lecture video link and instantly generate a structured outline, multi-depth summaries, timestamped flashcards, semantic search, transcript view, concept map, and multilingual study materials.
+The app supports two modes:
 
-The app is designed for students who missed a lecture, need to review quickly before an exam, or want to study in short focused bursts instead of rewatching a full lecture passively.
+1. **Student Study Mode**  
+   Students paste a lecture video link and generate a structured study kit with outlines, summaries, flashcards, concept maps, semantic search, transcript view, and multilingual study support.
+
+2. **Faculty Audit Mode**  
+   Faculty paste a lecture video link and generate a private, instructor-facing audit across pedagogy, accessibility, equity, clarity, pacing, cognitive load, and student engagement. The report includes a prioritized fix list and timestamped suggested rewrites.
+
+LectureForge AI is designed for students who want to study efficiently and faculty who want private, practical feedback before publishing or improving a lecture.
 
 ---
 
@@ -26,9 +33,54 @@ LectureForge AI helps students compress long lecture videos into active, targete
 
 ---
 
-##  Features
+## Faculty Capability
 
-###  YouTube URL to Study Kit
+LectureForge AI also helps faculty improve lectures before publishing or reuse existing lecture recordings more effectively.
+
+Faculty Audit Mode generates a private, instructor-facing report. It is voluntary, private, and explicitly not a surveillance or evaluation tool.
+
+### What the faculty member can do
+
+- Paste one YouTube lecture URL
+- Generate a private lecture audit
+- Review the single highest-impact fix before publishing
+- See a prioritized list of improvements
+- Audit the lecture across:
+  - Pedagogical clarity
+  - Accessibility
+  - Equity and inclusion
+  - Structure and pacing
+  - Cognitive load
+  - Student engagement
+- Review timestamped suggested rewrites
+- Identify unclear explanations, rushed transitions, and missing recaps
+- Improve lecture clarity before students see the final version
+
+### Faculty report includes
+
+- Overall lecture summary
+- Highest-impact fix
+- Priority fix list
+- Pedagogical clarity feedback
+- Accessibility feedback
+- Equity and inclusion feedback
+- Structure and pacing feedback
+- Cognitive load feedback
+- Student engagement feedback
+- Timestamped suggested rewrites
+- Final instructor notes
+
+### Faculty privacy principle
+
+Faculty Audit Mode is designed to support lecture improvement, not faculty monitoring.
+
+It does not produce instructor scores, rankings, grades, or performance labels. The report is written as private, constructive feedback for the instructor.
+
+---
+
+## Features
+
+### YouTube URL to Study Kit
 
 Students paste a YouTube lecture URL and LectureForge processes the lecture into a complete study environment.
 
@@ -38,7 +90,17 @@ YouTube URL -> Transcript -> Lecture Analysis -> Study Kit -> Interactive UI
 
 ---
 
-###  Timestamped Outline
+### YouTube URL to Faculty Audit
+
+Faculty paste a YouTube lecture URL and LectureForge generates a private audit report.
+
+```text
+YouTube URL -> Transcript -> Lecture Analysis -> Faculty Audit -> Private Report UI
+```
+
+---
+
+### Timestamped Outline
 
 LectureForge generates a structured outline of the lecture with start and end timestamps.
 
@@ -54,7 +116,7 @@ Open at 00:03:31
 
 ---
 
-###  Multi-Depth Summaries
+### Multi-Depth Summaries
 
 The app generates plain-language summaries at multiple depths:
 
@@ -66,7 +128,7 @@ This helps students choose how deeply they want to review based on the time they
 
 ---
 
-###  Flashcards With Source Moments
+### Flashcards With Source Moments
 
 LectureForge creates flashcards from the lecture content.
 
@@ -81,7 +143,7 @@ This makes the flashcards grounded in the original lecture instead of being gene
 
 ---
 
-###  Semantic Search
+### Semantic Search
 
 Students can type any question or topic, and LectureForge finds the most relevant lecture moments.
 
@@ -102,7 +164,7 @@ This allows students to locate the exact part of the lecture that answers their 
 
 ---
 
-###  Bilingual Study Support
+### Bilingual Study Support
 
 LectureForge generates English study materials by default.
 
@@ -120,7 +182,7 @@ Supported languages currently include:
 
 ---
 
-###  Progressive Translation
+### Progressive Translation
 
 Instead of waiting for the entire study kit to translate at once, LectureForge translates section by section.
 
@@ -138,7 +200,7 @@ This improves perceived speed and lets students start reading translated section
 
 ---
 
-###  Concept Map
+### Concept Map
 
 The app generates a visual concept map showing how major lecture topics connect.
 
@@ -146,7 +208,45 @@ This helps students understand the structure of the lecture at a glance.
 
 ---
 
-##  Architecture
+### Private Faculty Audit
+
+Faculty Audit Mode reviews the lecture from an instructional improvement perspective.
+
+The audit focuses on:
+
+* Whether key concepts are defined clearly
+* Whether transitions are easy to follow
+* Whether complex ideas are paced well
+* Whether the lecture supports students with different levels of prior knowledge
+* Whether visual, technical, or abstract content is explained clearly in words
+* Whether students receive enough recaps, examples, and reflection points
+* Whether the instructor can make one high-impact change before publishing
+
+The output is private, constructive, and instructor-facing.
+
+---
+
+### Timestamped Suggested Rewrites
+
+Faculty Audit Mode generates specific timestamped rewrites.
+
+Example:
+
+```text
+00:03:35
+Issue:
+The filter function is introduced before its inputs and return behavior are clearly explained.
+
+Suggested rewrite:
+The filter function takes two arguments: a function that defines the condition and an iterable, such as a list. It returns only the elements that satisfy the condition.
+
+Why this helps:
+This gives students a clear mental model before they see the code example.
+```
+
+---
+
+## Architecture
 
 LectureForge AI uses a multi-agent backend pipeline.
 
@@ -163,19 +263,21 @@ Agent 1: Transcript Ingestion
   v
 Agent 2: Lecture Structure Analysis
   |
-  v
-Agent 3: Study Kit Generation
-  |
-  v
-Semantic Search Index
-  |
-  v
-React Study Dashboard
+  +-----------------------------+
+  |                             |
+  v                             v
+Agent 3: Study Kit Generation   Agent 4: Faculty Audit Generation
+  |                             |
+  v                             v
+Semantic Search Index           Private Faculty Report
+  |                             |
+  v                             v
+React Study Dashboard           React Faculty Audit Dashboard
 ```
 
 ---
 
-##  Agent Workflow
+## Agent Workflow
 
 ### Agent 1: Transcript Ingestion
 
@@ -202,6 +304,8 @@ Agent 2 analyzes the transcript and identifies:
 * Key concepts
 * Source moments
 
+This title and structure are used by both Student Study Mode and Faculty Audit Mode.
+
 ---
 
 ### Agent 3: Study Kit Generation
@@ -217,7 +321,32 @@ Agent 3 generates:
 
 ---
 
-##  Search Design
+### Agent 4: Faculty Audit Generation
+
+Agent 4 generates a private instructor-facing audit.
+
+It reviews the lecture across:
+
+* Pedagogical clarity
+* Accessibility
+* Equity and inclusion
+* Structure and pacing
+* Cognitive load
+* Student engagement
+
+It returns:
+
+* Highest-impact fix
+* Prioritized fixes
+* Dimension-by-dimension feedback
+* Timestamped suggested rewrites
+* Final instructor notes
+
+Agent 4 does not score, rank, or evaluate the instructor. It focuses on practical lecture improvement.
+
+---
+
+## Search Design
 
 LectureForge creates embeddings from the English transcript chunks.
 
@@ -237,7 +366,7 @@ This keeps the search index efficient while still supporting multilingual users.
 
 ---
 
-##  Translation Design
+## Translation Design
 
 The video is processed once in English.
 
@@ -260,7 +389,43 @@ Translated sections are cached in memory for faster switching during the same se
 
 ---
 
-##  Tech Stack
+## Faculty Audit Design
+
+Faculty Audit Mode uses the same transcript ingestion and lecture analysis pipeline as Student Study Mode.
+
+```text
+YouTube URL
+  |
+  v
+Transcript extraction
+  |
+  v
+Lecture title and structure analysis
+  |
+  v
+Private faculty audit generation
+  |
+  v
+Faculty Audit Dashboard
+```
+
+The audit prompt is designed to work across different lecture types, including:
+
+* Programming lectures
+* Math lectures
+* Science lectures
+* Humanities lectures
+* Business lectures
+* Slide-based lectures
+* Whiteboard lectures
+* Demo or lab walkthroughs
+* Conceptual overview lectures
+
+The audit adapts feedback based on the lecture type instead of using a one-size-fits-all rubric.
+
+---
+
+## Tech Stack
 
 ### Frontend
 
@@ -287,7 +452,7 @@ Translated sections are cached in memory for faster switching during the same se
 
 ---
 
-##  Project Structure
+## Project Structure
 
 ```text
 lectureforge-ai/
@@ -295,7 +460,8 @@ lectureforge-ai/
 │   ├── agents/
 │   │   ├── agent1_ingestion.py
 │   │   ├── agent2_analysis.py
-│   │   └── agent3_study.py
+│   │   ├── agent3_study.py
+│   │   └── agent4_faculty_audit.py
 │   ├── models/
 │   │   └── schemas.py
 │   ├── services/
@@ -303,16 +469,19 @@ lectureforge-ai/
 │   │   └── openai_service.py
 │   ├── utils/
 │   │   ├── transcript_utils.py
-│   │   └── study_kit_validator.py
+│   │   ├── study_kit_validator.py
+│   │   └── faculty_audit_validator.py
 │   ├── main.py
 │   └── requirements.txt
 │
 └── lectureforge-frontend/
     ├── src/
     │   ├── components/
+    │   │   ├── Header.jsx
     │   │   ├── VideoForm.jsx
     │   │   ├── ProgressCard.jsx
     │   │   ├── StudyDashboard.jsx
+    │   │   ├── FacultyAuditDashboard.jsx
     │   │   ├── OutlineTab.jsx
     │   │   ├── SummariesTab.jsx
     │   │   ├── FlashcardsTab.jsx
@@ -329,7 +498,7 @@ lectureforge-ai/
 
 ---
 
-##  Getting Started Locally
+## Getting Started Locally
 
 ### 1. Clone the repository
 
@@ -432,14 +601,17 @@ http://localhost:5173
 
 ---
 
-##  Demo Flow
+## Demo Flow
+
+### Student Study Mode
 
 1. Start backend on port `8000`
 2. Start frontend on port `5173`
-3. Paste a YouTube lecture URL
-4. Click **Generate Study Kit**
-5. Wait for processing to complete
-6. Explore:
+3. Select **Student Study Mode**
+4. Paste a YouTube lecture URL
+5. Click **Generate Study Kit**
+6. Wait for processing to complete
+7. Explore:
 
    * Outline
    * Summaries
@@ -447,12 +619,113 @@ http://localhost:5173
    * Concept Map
    * Search
    * Transcript
-7. Click timestamp jump links to open the lecture at exact moments
-8. Change display language to translate the study kit progressively
+8. Click timestamp jump links to open the lecture at exact moments
+9. Change display language to translate the study kit progressively
 
 ---
 
-##  Environment Variables
+### Faculty Audit Mode
+
+1. Start backend on port `8000`
+2. Start frontend on port `5173`
+3. Select **Faculty Audit Mode**
+4. Paste a YouTube lecture URL
+5. Click **Generate Faculty Audit**
+6. Wait for processing to complete
+7. Review:
+
+   * Highest-impact fix
+   * Priority fix list
+   * Pedagogical clarity feedback
+   * Accessibility feedback
+   * Equity and inclusion feedback
+   * Structure and pacing feedback
+   * Cognitive load feedback
+   * Student engagement feedback
+   * Timestamped suggested rewrites
+8. Use the report as private lecture-improvement guidance before publishing
+
+---
+
+## API Endpoints
+
+### Student Study Mode
+
+Start video processing:
+
+```http
+POST /process-video
+```
+
+Check job status:
+
+```http
+GET /job-status/{job_id}
+```
+
+Fetch generated study kit:
+
+```http
+GET /study-kit/{job_id}
+```
+
+Translate full study kit:
+
+```http
+POST /translate-study-kit
+```
+
+Translate one section:
+
+```http
+POST /translate-section
+```
+
+Search study kit:
+
+```http
+POST /search
+```
+
+---
+
+### Faculty Audit Mode
+
+Start faculty audit:
+
+```http
+POST /process-faculty-audit
+```
+
+Check job status:
+
+```http
+GET /job-status/{job_id}
+```
+
+Fetch faculty audit:
+
+```http
+GET /faculty-audit/{job_id}
+```
+
+Example:
+
+```bash
+curl -X POST http://localhost:8000/process-faculty-audit \
+  -H "Content-Type: application/json" \
+  -d '{"youtube_url":"https://www.youtube.com/watch?v=YOUR_VIDEO_ID"}'
+```
+
+Then fetch the result:
+
+```bash
+curl -s http://localhost:8000/faculty-audit/YOUR_JOB_ID | python3 -m json.tool
+```
+
+---
+
+## Environment Variables
 
 ### Backend
 
@@ -477,7 +750,7 @@ VITE_API_BASE_URL=https://your-render-backend-url.onrender.com
 
 ---
 
-## ☁️ Deployment
+## Deployment
 
 ### Backend on Render
 
@@ -519,28 +792,32 @@ VITE_API_BASE_URL=https://your-render-backend-url.onrender.com
 
 ---
 
-##  Current Limitations
+## Current Limitations
 
 * Jobs are stored in memory, so job state can be lost if the backend restarts.
 * For production, Redis, Supabase, or PostgreSQL should replace the in-memory job store.
 * Search embeddings are generated from the English transcript for efficiency.
 * Translated search queries are converted back to English before semantic search.
+* Faculty audit reports are generated from transcript evidence, so transcript quality affects audit quality.
 * Supadata is used for transcript extraction in deployment because direct YouTube caption access can be blocked from cloud IPs.
 
 ---
 
-##  Future Improvements
+## Future Improvements
 
 * Persistent job storage with Redis, Supabase, or PostgreSQL
 * User accounts and saved study kits
+* Saved private faculty audit history
 * Export study kits to PDF
+* Export faculty audit reports to PDF
 * Export flashcards to Anki
 * Quiz mode
 * Notes mode
-* Institution dashboard
-* Video player embedded directly in the app
+* Embedded video player
+* Clickable timestamp links inside Faculty Audit rewrites
 * More granular transcript chunk translation
 * Evaluation dashboard for transcript quality and answer grounding
+* Faculty-side revision checklist based on priority fixes
 
 ---
 
@@ -548,13 +825,15 @@ VITE_API_BASE_URL=https://your-render-backend-url.onrender.com
 
 Students often do not have time to rewatch full lecture videos. LectureForge AI helps them convert passive lecture content into active study material.
 
-With timestamped jump-points, semantic search, flashcards, and multilingual support, a student can review a 60-minute lecture in a focused 15-minute study session while still staying grounded in the original source.
+Faculty also rarely receive timely, specific feedback before publishing a lecture. Peer review is limited, and student evaluations arrive late and can reflect bias rather than instructional quality.
+
+LectureForge AI supports both sides of the learning loop:
+
+* Students get faster, more active study support.
+* Faculty get private, practical feedback to improve lecture clarity before students rely on the material.
+
+With timestamped jump-points, semantic search, flashcards, multilingual support, and private faculty audits, LectureForge turns lecture videos into useful learning infrastructure.
 
 ---
 
-##  Final Demo Statement
-
-LectureForge AI lets a student paste one lecture YouTube URL and turns it into an interactive study environment with timestamped outline jump-points, multi-depth summaries, flashcards tied to cited source moments, semantic search that jumps back to the exact lecture moment, transcript view, concept map, and progressive multilingual translation without reprocessing the video.
-
-````
-
+```

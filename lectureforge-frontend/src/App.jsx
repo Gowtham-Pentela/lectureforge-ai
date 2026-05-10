@@ -3,17 +3,22 @@ import Header from "./components/Header";
 import VideoForm from "./components/VideoForm";
 import ProgressCard from "./components/ProgressCard";
 import StudyDashboard from "./components/StudyDashboard";
+import FacultyAuditDashboard from "./components/FacultyAuditDashboard";
 import {
   processVideo,
+  processFacultyAudit,
   getJobStatus,
   getStudyKit,
+  getFacultyAudit,
   translateSection,
 } from "./lib/api";
 
 export default function App() {
+  const [mode, setMode] = useState("student");
   const [jobId, setJobId] = useState(null);
   const [studyKit, setStudyKit] = useState(null);
   const [englishStudyKit, setEnglishStudyKit] = useState(null);
+  const [facultyAudit, setFacultyAudit] = useState(null);
   const [selectedLanguage, setSelectedLanguage] = useState("English");
   const [sourceVideoUrl, setSourceVideoUrl] = useState("");
 
@@ -28,6 +33,7 @@ export default function App() {
       setError("");
       setStudyKit(null);
       setEnglishStudyKit(null);
+      setFacultyAudit(null);
       setSelectedLanguage("English");
       setTranslationProgress({});
       setJobId(null);
@@ -35,14 +41,21 @@ export default function App() {
       const initialStatus = {
         status: "queued",
         progress: 0,
-        message: "Starting video processing",
+        message:
+          mode === "faculty"
+            ? "Starting faculty audit"
+            : "Starting video processing",
         error: null,
         can_continue_with_transcript: false,
       };
 
       setJobStatus(initialStatus);
 
-      const response = await processVideo(youtubeUrl);
+      const response =
+        mode === "faculty"
+          ? await processFacultyAudit(youtubeUrl)
+          : await processVideo(youtubeUrl);
+
       const newJobId = response.job_id;
 
       setJobId(newJobId);
@@ -50,17 +63,21 @@ export default function App() {
       setJobStatus({
         status: response.status || "queued",
         progress: 0,
-        message: response.message || "Video processing started",
+        message:
+          response.message ||
+          (mode === "faculty"
+            ? "Faculty audit started"
+            : "Video processing started"),
         error: null,
         can_continue_with_transcript: false,
       });
 
-      pollJobStatus(newJobId);
+      pollJobStatus(newJobId, mode);
     } catch (err) {
       const failedStatus = {
         status: "failed",
         progress: 100,
-        message: "Processing failed",
+        message: mode === "faculty" ? "Faculty audit failed" : "Processing failed",
         error: err.message || "Failed to process video",
         can_continue_with_transcript: false,
       };
@@ -70,7 +87,7 @@ export default function App() {
     }
   }
 
-  async function pollJobStatus(newJobId) {
+  async function pollJobStatus(newJobId, requestedMode) {
     let attempts = 0;
     const maxAttempts = 180;
 
@@ -93,21 +110,41 @@ export default function App() {
         if (job.status === "completed") {
           clearInterval(intervalId);
 
-          const kit = await getStudyKit(newJobId);
-
           setJobId(newJobId);
-          setEnglishStudyKit(kit);
-          setStudyKit(kit);
-          setSelectedLanguage("English");
-          setTranslationProgress({});
 
-          setJobStatus({
-            status: "completed",
-            progress: 100,
-            message: "Study kit ready",
-            error: null,
-            can_continue_with_transcript: false,
-          });
+          if (requestedMode === "faculty") {
+            const audit = await getFacultyAudit(newJobId);
+
+            setFacultyAudit(audit);
+            setStudyKit(null);
+            setEnglishStudyKit(null);
+            setSelectedLanguage("English");
+            setTranslationProgress({});
+
+            setJobStatus({
+              status: "completed",
+              progress: 100,
+              message: "Faculty audit ready",
+              error: null,
+              can_continue_with_transcript: false,
+            });
+          } else {
+            const kit = await getStudyKit(newJobId);
+
+            setEnglishStudyKit(kit);
+            setStudyKit(kit);
+            setFacultyAudit(null);
+            setSelectedLanguage("English");
+            setTranslationProgress({});
+
+            setJobStatus({
+              status: "completed",
+              progress: 100,
+              message: "Study kit ready",
+              error: null,
+              can_continue_with_transcript: false,
+            });
+          }
         }
 
         if (job.status === "failed") {
@@ -119,7 +156,9 @@ export default function App() {
           clearInterval(intervalId);
 
           const timeoutMessage =
-            "Processing took too long. Please try a shorter lecture.";
+            requestedMode === "faculty"
+              ? "Faculty audit took too long. Please try a shorter lecture."
+              : "Processing took too long. Please try a shorter lecture.";
 
           setJobStatus({
             status: "failed",
@@ -147,6 +186,23 @@ export default function App() {
         setError(message);
       }
     }, 2500);
+  }
+
+  function handleModeChange(nextMode) {
+    if (isProcessing || isTranslating) {
+      return;
+    }
+
+    setMode(nextMode);
+    setJobId(null);
+    setStudyKit(null);
+    setEnglishStudyKit(null);
+    setFacultyAudit(null);
+    setSelectedLanguage("English");
+    setSourceVideoUrl("");
+    setJobStatus(null);
+    setError("");
+    setTranslationProgress({});
   }
 
   async function handleLanguageChange(language) {
@@ -317,21 +373,58 @@ export default function App() {
               </p>
 
               <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
-                Turn YouTube lectures into study kits
+                {mode === "faculty"
+                  ? "Improve lectures before students see them"
+                  : "Turn YouTube lectures into study kits"}
               </h1>
 
               <p className="mt-3 max-w-3xl text-base leading-7 text-slate-600">
-                Paste a YouTube lecture URL. LectureForge processes the video
-                once in English, then progressively translates the generated
-                study material section by section without reprocessing the
-                video.
+                {mode === "faculty"
+                  ? "Paste a lecture URL to generate a private, instructor-facing audit across clarity, accessibility, equity, pacing, cognitive load, and student engagement."
+                  : "Paste a YouTube lecture URL. LectureForge processes the video once in English, then progressively translates the generated study material section by section without reprocessing the video."}
               </p>
+            </div>
+
+            <div className="mb-6 flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => handleModeChange("student")}
+                disabled={isProcessing || isTranslating}
+                className={`rounded-xl border px-4 py-2 text-sm font-semibold transition ${
+                  mode === "student"
+                    ? "border-slate-950 bg-slate-950 text-white"
+                    : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                } disabled:cursor-not-allowed disabled:opacity-60`}
+              >
+                Student Study Mode
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleModeChange("faculty")}
+                disabled={isProcessing || isTranslating}
+                className={`rounded-xl border px-4 py-2 text-sm font-semibold transition ${
+                  mode === "faculty"
+                    ? "border-slate-950 bg-slate-950 text-white"
+                    : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                } disabled:cursor-not-allowed disabled:opacity-60`}
+              >
+                Faculty Audit Mode
+              </button>
             </div>
 
             <VideoForm
               onSubmit={handleProcessVideo}
               disabled={isProcessing || isTranslating}
+              mode={mode}
             />
+
+            {mode === "faculty" && (
+              <p className="mt-4 text-sm leading-6 text-slate-500">
+                Faculty reports are private, voluntary, and designed for lecture
+                improvement only. They are not evaluations or surveillance.
+              </p>
+            )}
           </div>
         </section>
 
@@ -350,7 +443,7 @@ export default function App() {
           </div>
         )}
 
-        {studyKit && (
+        {mode === "student" && studyKit && (
           <StudyDashboard
             studyKit={studyKit}
             jobId={jobId}
@@ -360,6 +453,10 @@ export default function App() {
             isTranslating={isTranslating}
             translationProgress={translationProgress}
           />
+        )}
+
+        {mode === "faculty" && facultyAudit && (
+          <FacultyAuditDashboard audit={facultyAudit} />
         )}
       </main>
     </div>

@@ -1,5 +1,5 @@
 from typing import List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class TranscriptChunk(BaseModel):
@@ -100,12 +100,14 @@ class TranslateStudyKitRequest(BaseModel):
     job_id: str
     target_language: str
 
+
 class TranslateSectionRequest(BaseModel):
     job_id: str
     target_language: str
     section: str
     batch_start: Optional[int] = 0
     batch_size: Optional[int] = 5
+
 
 class SearchRequest(BaseModel):
     job_id: str
@@ -126,3 +128,50 @@ class SearchResult(BaseModel):
 class SearchResponse(BaseModel):
     query: str
     results: List[SearchResult]
+
+
+class FacultyAuditRequest(BaseModel):
+    youtube_url: str
+
+
+class HighestImpactFix(BaseModel):
+    timestamp: str
+    issue: str
+    why_it_matters: str
+    suggested_improvement: str
+
+
+class PriorityFix(BaseModel):
+    priority: str
+    timestamp: str
+    issue: str
+    why_it_matters: str
+    suggested_improvement: str
+
+
+class AuditDimension(BaseModel):
+    summary: str
+    strengths: List[str] = Field(default_factory=list)
+    opportunities: List[str] = Field(default_factory=list)
+
+
+class TimestampedRewrite(BaseModel):
+    timestamp: str
+    current_issue: str
+    suggested_rewrite: str
+    why_this_helps: str
+
+
+class FacultyAuditReport(BaseModel):
+    lecture_title: Optional[str] = None
+    overall_summary: str
+    highest_impact_fix: HighestImpactFix
+    priority_fixes: List[PriorityFix]
+    pedagogical_clarity: AuditDimension
+    accessibility: AuditDimension
+    equity_and_inclusion: AuditDimension
+    structure_and_pacing: AuditDimension
+    cognitive_load: AuditDimension
+    student_engagement: AuditDimension
+    timestamped_rewrites: List[TimestampedRewrite]
+    final_notes: str

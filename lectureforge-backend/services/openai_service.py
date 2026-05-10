@@ -27,6 +27,14 @@ def generate_json(system_prompt: str, user_prompt: str) -> Dict[str, Any]:
     return json.loads(content)
 
 
+def call_openai_json(system_prompt: str, user_prompt: str) -> Dict[str, Any]:
+    """
+    Backward-compatible alias for agents that expect a JSON helper.
+    """
+
+    return generate_json(system_prompt=system_prompt, user_prompt=user_prompt)
+
+
 def generate_text(system_prompt: str, user_prompt: str) -> str:
     response = client.chat.completions.create(
         model=OPENAI_MODEL,
