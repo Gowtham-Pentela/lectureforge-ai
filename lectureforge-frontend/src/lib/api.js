@@ -1,6 +1,15 @@
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
+function getErrorMessage(error, fallback) {
+  return (
+    error?.detail?.message ||
+    error?.detail ||
+    error?.message ||
+    fallback
+  );
+}
+
 export async function processVideo(youtubeUrl) {
   const response = await fetch(`${API_BASE_URL}/process-video`, {
     method: "POST",
@@ -15,7 +24,7 @@ export async function processVideo(youtubeUrl) {
 
   if (!response.ok) {
     const error = await response.json();
-    throw new Error(error.detail || "Failed to process video");
+    throw new Error(getErrorMessage(error, "Failed to process video"));
   }
 
   return response.json();
@@ -34,7 +43,29 @@ export async function processFacultyAudit(youtubeUrl) {
 
   if (!response.ok) {
     const error = await response.json();
-    throw new Error(error.detail || "Failed to start faculty audit");
+    throw new Error(getErrorMessage(error, "Failed to process faculty audit"));
+  }
+
+  return response.json();
+}
+
+export async function processFacultyAuditFromStudyKit(jobId) {
+  const response = await fetch(
+    `${API_BASE_URL}/process-faculty-audit-from-study-kit`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        job_id: jobId,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(getErrorMessage(error, "Failed to process faculty audit"));
   }
 
   return response.json();
@@ -45,7 +76,7 @@ export async function getJobStatus(jobId) {
 
   if (!response.ok) {
     const error = await response.json();
-    throw new Error(error.detail || "Failed to get job status");
+    throw new Error(getErrorMessage(error, "Failed to get job status"));
   }
 
   return response.json();
@@ -56,9 +87,7 @@ export async function getStudyKit(jobId) {
 
   if (!response.ok) {
     const error = await response.json();
-    throw new Error(
-      error.detail?.message || error.detail || "Failed to get study kit"
-    );
+    throw new Error(getErrorMessage(error, "Failed to get study kit"));
   }
 
   return response.json();
@@ -69,9 +98,7 @@ export async function getFacultyAudit(jobId) {
 
   if (!response.ok) {
     const error = await response.json();
-    throw new Error(
-      error.detail?.message || error.detail || "Failed to get faculty audit"
-    );
+    throw new Error(getErrorMessage(error, "Failed to get faculty audit"));
   }
 
   return response.json();
@@ -92,9 +119,7 @@ export async function translateStudyKit(jobId, targetLanguage) {
   if (!response.ok) {
     const error = await response.json();
     throw new Error(
-      error.detail?.message ||
-        error.detail ||
-        "Failed to translate study kit"
+      getErrorMessage(error, "Failed to translate study kit")
     );
   }
 
@@ -122,7 +147,7 @@ export async function searchStudyKit(
 
   if (!response.ok) {
     const error = await response.json();
-    throw new Error(error.detail || "Search failed");
+    throw new Error(getErrorMessage(error, "Search failed"));
   }
 
   return response.json();
@@ -152,9 +177,7 @@ export async function translateSection({
   if (!response.ok) {
     const error = await response.json();
     throw new Error(
-      error.detail?.message ||
-        error.detail ||
-        `Failed to translate ${section}`
+      getErrorMessage(error, `Failed to translate ${section}`)
     );
   }
 
