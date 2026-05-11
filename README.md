@@ -282,7 +282,7 @@ Semantic Search Index           Private Faculty Report
   v                             v
 React Study Dashboard           React Faculty Audit Dashboard
 ```
-
+img src = 'lectureforge_architecture_diagram.png'
 ---
 
 ## Agent Workflow
