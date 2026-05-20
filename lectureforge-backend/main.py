@@ -22,7 +22,7 @@ from models.schemas import (
 )
 
 from services.job_store import JobStore
-from services.openai_service import create_embedding, generate_text
+from services.openai_service import create_embedding, generate_text, generate_json
 from agents.agent1_ingestion import Agent1Ingestion
 from agents.agent2_analysis import Agent2Analysis
 from agents.agent3_study import Agent3Study
@@ -518,15 +518,13 @@ def translate_study_kit(request: TranslateStudyKitRequest):
         return translated_study_kit
 
     except Exception as e:
-        public_error = build_public_error_message(str(e))
-
         raise HTTPException(
             status_code=500,
-            detail={
-                "message": public_error["message"],
-                "raw_error": public_error.get("raw_error"),
-                "error_code": public_error["error_code"],
-            },
+            detail=build_translation_error_detail(
+                raw_error=str(e),
+                target_language=target_language,
+                section="full study kit",
+            ),
         )
 
 
@@ -610,17 +608,14 @@ def translate_section(request: TranslateSectionRequest):
         }
 
     except Exception as e:
-        public_error = build_public_error_message(str(e))
-
         raise HTTPException(
             status_code=500,
-            detail={
-                "message": public_error["message"],
-                "raw_error": public_error.get("raw_error"),
-                "error_code": public_error["error_code"],
-            },
+            detail=build_translation_error_detail(
+                raw_error=str(e),
+                target_language=target_language,
+                section=section,
+            ),
         )
-
 
 @app.post("/search", response_model=SearchResponse)
 def semantic_search(request: SearchRequest):
@@ -703,11 +698,7 @@ def semantic_search(request: SearchRequest):
 
 
 def translate_existing_study_kit(study_kit, target_language: str):
-    study_kit_dict = (
-        study_kit.model_dump()
-        if hasattr(study_kit, "model_dump")
-        else dict(study_kit)
-    )
+    study_kit_dict = get_study_kit_dict(study_kit)
 
     translation_payload = {
         "lecture_title": study_kit_dict.get("lecture_title"),
@@ -726,8 +717,22 @@ Translate the provided study kit content into {target_language}.
 
 Return valid JSON only.
 
-Very important rules:
-- Preserve the exact same top-level JSON keys.
+You must return this exact JSON object shape:
+
+{{
+  "translated_study_kit": {{
+    "lecture_title": "...",
+    "transcript_chunks": [],
+    "outline": [],
+    "key_concepts": [],
+    "summaries": {{}},
+    "flashcards": [],
+    "concept_map": {{}}
+  }}
+}}
+
+Rules:
+- Preserve the exact same top-level keys inside translated_study_kit.
 - Preserve all timestamps exactly.
 - Preserve all numeric fields exactly.
 - Preserve all ids exactly.
@@ -747,51 +752,59 @@ Very important rules:
 """
 
     user_prompt = f"""
-Translate this complete study kit into {target_language}:
+Translate this complete study kit into {target_language}.
 
+Return only the required JSON object.
+
+Study kit:
 {json.dumps(translation_payload, ensure_ascii=False)}
 """
 
-    translated_text = generate_text(
+    translated_payload = generate_json(
         system_prompt=system_prompt,
         user_prompt=user_prompt,
     )
 
-    translated_payload = extract_json_from_text(translated_text)
+    translated_section = translated_payload.get("translated_study_kit")
+
+    if not isinstance(translated_section, dict):
+        raise ValueError(
+            "Translation response did not contain translated_study_kit"
+        )
 
     translated_study_kit = deepcopy(study_kit_dict)
 
-    translated_study_kit["lecture_title"] = translated_payload.get(
+    translated_study_kit["lecture_title"] = translated_section.get(
         "lecture_title",
         study_kit_dict.get("lecture_title"),
     )
 
-    translated_study_kit["transcript_chunks"] = translated_payload.get(
+    translated_study_kit["transcript_chunks"] = translated_section.get(
         "transcript_chunks",
         study_kit_dict.get("transcript_chunks", []),
     )
 
-    translated_study_kit["outline"] = translated_payload.get(
+    translated_study_kit["outline"] = translated_section.get(
         "outline",
         study_kit_dict.get("outline", []),
     )
 
-    translated_study_kit["key_concepts"] = translated_payload.get(
+    translated_study_kit["key_concepts"] = translated_section.get(
         "key_concepts",
         study_kit_dict.get("key_concepts", []),
     )
 
-    translated_study_kit["summaries"] = translated_payload.get(
+    translated_study_kit["summaries"] = translated_section.get(
         "summaries",
         study_kit_dict.get("summaries", {}),
     )
 
-    translated_study_kit["flashcards"] = translated_payload.get(
+    translated_study_kit["flashcards"] = translated_section.get(
         "flashcards",
         study_kit_dict.get("flashcards", []),
     )
 
-    translated_study_kit["concept_map"] = translated_payload.get(
+    translated_study_kit["concept_map"] = translated_section.get(
         "concept_map",
         study_kit_dict.get("concept_map", {}),
     )
@@ -986,8 +999,16 @@ Translate the provided JSON section into {target_language}.
 
 Return valid JSON only.
 
+You must return this exact JSON object shape:
+
+{{
+  "translated": null
+}}
+
+The value of "translated" must contain the translated version of the input payload.
+
 Rules:
-- Preserve the exact same JSON structure.
+- Preserve the exact same JSON structure inside translated.
 - Preserve all numeric values exactly.
 - Preserve timestamps exactly.
 - Preserve start, end, start_time, end_time, timestamp, and timestamp_time exactly.
@@ -1008,18 +1029,91 @@ Rules:
     user_prompt = f"""
 Section name: {section}
 
-Translate this JSON section into {target_language}:
+Translate this JSON section into {target_language}.
 
+Return only the required JSON object.
+
+Payload:
 {json.dumps(payload, ensure_ascii=False)}
 """
 
-    translated_text = generate_text(
+    translated_payload = generate_json(
         system_prompt=system_prompt,
         user_prompt=user_prompt,
     )
 
-    return extract_json_from_text(translated_text)
+    if "translated" not in translated_payload:
+        raise ValueError("Translation response did not contain translated field")
 
+    return translated_payload["translated"]
+
+def build_translation_error_detail(
+    raw_error: str,
+    target_language: str,
+    section: str,
+):
+    lower_error = raw_error.lower()
+
+    if "maximum context length" in lower_error or "context_length_exceeded" in lower_error:
+        return {
+            "message": (
+                f"Translation failed because the {section} content is too long. "
+                "Please retry section-by-section or use a shorter lecture."
+            ),
+            "raw_error": raw_error,
+            "error_code": "TRANSLATION_CONTEXT_LENGTH_ERROR",
+            "target_language": target_language,
+            "section": section,
+        }
+
+    if "insufficient_quota" in lower_error or "exceeded your current quota" in lower_error:
+        return {
+            "message": (
+                "Translation failed because OpenAI quota or billing is not available."
+            ),
+            "raw_error": raw_error,
+            "error_code": "TRANSLATION_OPENAI_QUOTA_ERROR",
+            "target_language": target_language,
+            "section": section,
+        }
+
+    if "rate_limit" in lower_error or ("openai" in lower_error and "429" in lower_error):
+        return {
+            "message": (
+                "Translation was rate-limited. Please retry after a short delay."
+            ),
+            "raw_error": raw_error,
+            "error_code": "TRANSLATION_RATE_LIMIT",
+            "target_language": target_language,
+            "section": section,
+        }
+
+    if (
+        "json" in lower_error
+        or "validation error" in lower_error
+        or "field required" in lower_error
+        or "translated" in lower_error
+    ):
+        return {
+            "message": (
+                f"Translation failed because the model response for {section} did not match the expected structure. "
+                "Please retry this section."
+            ),
+            "raw_error": raw_error,
+            "error_code": "TRANSLATION_SCHEMA_ERROR",
+            "target_language": target_language,
+            "section": section,
+        }
+
+    return {
+        "message": (
+            f"Translation failed for {section}. Please retry or choose another language."
+        ),
+        "raw_error": raw_error,
+        "error_code": "TRANSLATION_ERROR",
+        "target_language": target_language,
+        "section": section,
+    }
 
 def build_public_error_message(raw_error: str):
     lower_error = raw_error.lower()
@@ -1134,15 +1228,9 @@ def build_public_error_message(raw_error: str):
             "raw_error": raw_error,
         }
 
-    if (
-    "json" in lower_error
-    or "validation error" in lower_error
-    or "field required" in lower_error
-    or "pydantic" in lower_error
-    or "facultyauditreport" in lower_error
-):
+    if "facultyauditreport" in lower_error:
         return {
-        "error_code": "MODEL_SCHEMA_ERROR",
+        "error_code": "FACULTY_AUDIT_SCHEMA_ERROR",
         "message": (
             "The model returned a faculty audit response that did not match the required structure. "
             "Please retry, or use a shorter lecture."
@@ -1151,6 +1239,21 @@ def build_public_error_message(raw_error: str):
         "raw_error": raw_error,
     }
 
+    if (
+    "json" in lower_error
+    or "validation error" in lower_error
+    or "field required" in lower_error
+    or "pydantic" in lower_error
+):
+        return {
+        "error_code": "MODEL_SCHEMA_ERROR",
+        "message": (
+            "The model returned a response that did not match the expected structure. "
+            "Please retry the request."
+        ),
+        "can_continue_with_transcript": False,
+        "raw_error": raw_error,
+    }
     if "empty" in lower_error:
         return {
             "error_code": "EMPTY_INPUT",
