@@ -11,8 +11,9 @@ import {
   ShieldCheck,
   Users,
 } from "lucide-react";
+import { buildYouTubeEmbedUrl } from "../lib/youtube";
 
-export default function FacultyAuditDashboard({ audit }) {
+export default function FacultyAuditDashboard({ audit, sourceVideoUrl }) {
   const [activeTab, setActiveTab] = useState("summary");
 
   if (!audit) {
@@ -22,6 +23,15 @@ export default function FacultyAuditDashboard({ audit }) {
   const highestImpactFix = audit.highest_impact_fix || {};
   const priorityFixes = audit.priority_fixes || [];
   const rewrites = audit.timestamped_rewrites || [];
+  const embedUrl = buildYouTubeEmbedUrl(sourceVideoUrl);
+  const dimensions = [
+    audit.pedagogical_clarity,
+    audit.accessibility,
+    audit.equity_and_inclusion,
+    audit.structure_and_pacing,
+    audit.cognitive_load,
+    audit.student_engagement,
+  ].filter(Boolean);
 
   const downloadReport = () => {
     const reportText = buildMarkdownReport(audit);
@@ -70,244 +80,291 @@ export default function FacultyAuditDashboard({ audit }) {
   ];
 
   return (
-    <section className="w-full max-w-6xl mx-auto mt-8">
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-6">
-        <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
-          <div>
-            <div className="flex items-center gap-2 text-indigo-600 mb-2">
-              <ShieldCheck size={18} />
-              <p className="text-sm font-semibold">Private Faculty Report</p>
+    <main className="-mx-4 -mb-6 border-t border-[var(--app-border)] sm:-mx-6">
+      <section className="grid min-h-[calc(100vh-4rem)] lg:grid-cols-[50%_50%]">
+        <div className="border-b border-[var(--app-border)] bg-[var(--app-panel)] px-4 py-5 sm:px-6 lg:border-b-0 lg:border-r">
+          <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="mb-2 text-xs font-bold uppercase tracking-[0.24em] text-[var(--app-soft)]">
+                Faculty review
+              </p>
+
+              <h1 className="max-w-4xl font-serif text-3xl font-semibold leading-tight text-[var(--app-text)]">
+                {audit.lecture_title || "Faculty Lecture Audit"}
+              </h1>
+
+              <div className="mt-3 flex flex-wrap gap-4 text-sm font-semibold text-[var(--app-muted)]">
+                <span className="inline-flex items-center gap-1.5">
+                  <ShieldCheck className="h-4 w-4" />
+                  Private report
+                </span>
+                <span>{priorityFixes.length} priority fixes</span>
+                <span>{rewrites.length} rewrites</span>
+                <span>{dimensions.length} dimensions</span>
+              </div>
             </div>
 
-            <h2 className="text-2xl font-bold text-slate-900">
-              Faculty Lecture Audit
-            </h2>
-
-            <p className="text-slate-600 mt-2 max-w-3xl leading-7">
-              This report is private and intended only for the instructor. It is
-              designed to support lecture improvement, not evaluate or monitor
-              faculty performance.
-            </p>
-
-            {audit.lecture_title && (
-              <p className="text-sm text-slate-500 mt-3">
-                Lecture: {audit.lecture_title}
-              </p>
-            )}
-          </div>
-
-          <button
-            onClick={downloadReport}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 transition"
-          >
-            <Download size={18} />
-            Download Report
-          </button>
-        </div>
-      </div>
-
-      <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-5 mb-6">
-        <div className="flex items-center gap-2 text-indigo-700 mb-2">
-          <Lightbulb size={18} />
-          <p className="text-sm font-semibold">
-            If you change one thing before publishing, change this:
-          </p>
-        </div>
-
-        <div className="space-y-2">
-          <p className="text-sm text-slate-500">
-            Timestamp: {highestImpactFix.timestamp || "N/A"}
-          </p>
-
-          <p className="text-slate-800">
-            <strong>Issue:</strong>{" "}
-            {highestImpactFix.issue || "No issue identified."}
-          </p>
-
-          <p className="text-slate-700">
-            <strong>Why it matters:</strong>{" "}
-            {highestImpactFix.why_it_matters || "No explanation available."}
-          </p>
-
-          <p className="text-slate-700">
-            <strong>Suggested improvement:</strong>{" "}
-            {highestImpactFix.suggested_improvement ||
-              "No suggested improvement available."}
-          </p>
-        </div>
-      </div>
-
-      <div className="flex flex-wrap gap-2 mb-6">
-        {tabs.map((tab) => {
-          const Icon = tab.icon;
-
-          return (
             <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl border text-sm transition ${
-                activeTab === tab.id
-                  ? "bg-slate-900 text-white border-slate-900"
-                  : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-              }`}
+              onClick={downloadReport}
+              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-[var(--app-accent)] px-4 py-2 text-sm font-black text-white shadow-[0_12px_28px_rgba(41,53,232,0.24)] transition hover:-translate-y-0.5"
             >
-              <Icon size={16} />
-              {tab.label}
+              <Download size={17} />
+              Download
             </button>
-          );
-        })}
-      </div>
-
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-        {activeTab === "summary" && (
-          <div className="space-y-8">
-            <TextBlock
-              title="Overall Summary"
-              content={audit.overall_summary}
-            />
-
-            <TextBlock title="Final Notes" content={audit.final_notes} />
           </div>
-        )}
 
-        {activeTab === "fixes" && (
-          <div>
-            <h3 className="text-xl font-semibold text-slate-900 mb-4">
-              Priority Fix List
-            </h3>
-
-            {priorityFixes.length === 0 ? (
-              <EmptyState message="No priority fixes were returned." />
+          <div className="overflow-hidden rounded-md border border-[var(--app-border)] bg-black shadow-[0_18px_45px_rgba(15,23,42,0.16)]">
+            {embedUrl ? (
+              <iframe
+                title={audit.lecture_title || "Lecture video"}
+                src={embedUrl}
+                className="aspect-video w-full"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+              />
             ) : (
-              <div className="space-y-4">
-                {priorityFixes.map((fix, index) => (
-                  <div
-                    key={`${fix.timestamp}-${index}`}
-                    className="border border-slate-200 rounded-xl p-4"
-                  >
-                    <div className="flex items-center justify-between gap-4 mb-3">
-                      <span className="font-semibold text-slate-900">
-                        {index + 1}. {fix.priority} Priority
-                      </span>
-
-                      <span className="text-sm text-slate-500">
-                        {fix.timestamp}
-                      </span>
-                    </div>
-
-                    <p className="text-slate-800 font-medium">{fix.issue}</p>
-
-                    <p className="text-slate-600 mt-3">
-                      <strong>Why it matters:</strong> {fix.why_it_matters}
-                    </p>
-
-                    <p className="text-slate-600 mt-3">
-                      <strong>Suggested improvement:</strong>{" "}
-                      {fix.suggested_improvement}
-                    </p>
-                  </div>
-                ))}
+              <div className="grid aspect-video place-items-center bg-slate-950 px-6 text-center text-sm text-white">
+                Video preview is available after a valid YouTube URL is
+                processed.
               </div>
             )}
           </div>
-        )}
 
-        {activeTab === "accessibility" && (
-        <DimensionSection
-          title="Accessibility"
-          icon={Captions}
-          dimension={audit.accessibility}
-        />
-      )}
+          <div className="mt-5 border-l-2 border-[var(--app-red)] bg-[var(--app-red-soft)] px-5 py-4">
+            <div className="mb-3 flex items-center gap-2 text-[var(--app-red)]">
+              <Lightbulb size={18} />
+              <p className="text-xs font-black uppercase tracking-[0.2em]">
+                Highest impact fix
+              </p>
+            </div>
 
-        {activeTab === "equity" && (
-          <div className="space-y-8">
-            <DimensionSection
-              title="Equity and Inclusion"
-              icon={Users}
-              dimension={audit.equity_and_inclusion}
-            />
-
-            <DimensionSection
-              title="Pedagogical Clarity"
-              icon={BookOpen}
-              dimension={audit.pedagogical_clarity}
-            />
+            <div className="space-y-3 text-sm leading-6 text-[var(--app-text)]">
+              <p className="font-mono text-xs font-bold text-[var(--app-red)]">
+                {highestImpactFix.timestamp || "N/A"}
+              </p>
+              <p className="text-lg font-semibold">
+                {highestImpactFix.issue || "No issue identified."}
+              </p>
+              <p className="text-[var(--app-muted)]">
+                {highestImpactFix.why_it_matters ||
+                  "No explanation available."}
+              </p>
+              <p>
+                {highestImpactFix.suggested_improvement ||
+                  "No suggested improvement available."}
+              </p>
+            </div>
           </div>
-        )}
 
-        {activeTab === "pacing" && (
-          <div className="space-y-8">
-            <DimensionSection
-              title="Structure and Pacing"
-              icon={Clock}
-              dimension={audit.structure_and_pacing}
-            />
-
-            <DimensionSection
-              title="Cognitive Load"
-              icon={Brain}
-              dimension={audit.cognitive_load}
-            />
-
-            <DimensionSection
-              title="Student Engagement"
-              icon={MessageSquare}
-              dimension={audit.student_engagement}
-            />
+          <div className="mt-5">
+            <p className="mb-3 text-xs font-bold uppercase tracking-[0.24em] text-[var(--app-soft)]">
+              Review snapshot
+            </p>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Metric label="Fixes" value={priorityFixes.length} />
+              <Metric label="Rewrites" value={rewrites.length} />
+              <Metric label="Areas" value={dimensions.length} />
+            </div>
           </div>
-        )}
+        </div>
 
-        {activeTab === "rewrites" && (
-          <div>
-            <h3 className="text-xl font-semibold text-slate-900 mb-4">
-              Timestamped Suggested Rewrites
-            </h3>
+        <aside className="bg-[var(--app-panel-muted)]">
+          <div className="flex min-h-16 flex-col gap-3 border-b border-[var(--app-border)] px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-wrap gap-1">
+              {tabs.map((tab) => {
+                const Icon = tab.icon;
 
-            {rewrites.length === 0 ? (
-              <EmptyState message="No timestamped rewrites were returned." />
-            ) : (
-              <div className="space-y-4">
-                {rewrites.map((rewrite, index) => (
-                  <div
-                    key={`${rewrite.timestamp}-${index}`}
-                    className="border border-slate-200 rounded-xl p-4"
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`inline-flex items-center gap-2 border-b-2 px-3 py-2 text-sm font-semibold transition ${
+                      activeTab === tab.id
+                        ? "border-[var(--app-red)] text-[var(--app-text)]"
+                        : "border-transparent text-[var(--app-muted)] hover:text-[var(--app-text)]"
+                    }`}
                   >
-                    <div className="text-sm font-semibold text-indigo-600 mb-3">
-                      {rewrite.timestamp}
-                    </div>
+                    <Icon size={16} />
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
 
-                    <p className="text-slate-700">
-                      <strong>Current issue:</strong>{" "}
-                      {rewrite.current_issue}
-                    </p>
+            <div className="rounded-md border border-[var(--app-border)] bg-[var(--app-panel)] px-3 py-2 text-xs font-bold uppercase tracking-[0.18em] text-[var(--app-soft)]">
+              Instructor only
+            </div>
+          </div>
 
-                    <p className="text-slate-700 mt-3">
-                      <strong>Suggested rewrite:</strong>{" "}
-                      {rewrite.suggested_rewrite}
-                    </p>
+          <div className="h-[calc(100vh-8rem)] overflow-y-auto px-5 py-5">
+            {activeTab === "summary" && (
+              <div className="space-y-8">
+                <TextBlock
+                  title="Overall Summary"
+                  content={audit.overall_summary}
+                />
 
-                    <p className="text-slate-600 mt-3">
-                      <strong>Why this helps:</strong>{" "}
-                      {rewrite.why_this_helps}
-                    </p>
+                <TextBlock title="Final Notes" content={audit.final_notes} />
+              </div>
+            )}
+
+            {activeTab === "fixes" && (
+              <div>
+                <h3 className="mb-4 font-serif text-2xl font-semibold text-[var(--app-text)]">
+                  Priority Fix List
+                </h3>
+
+                {priorityFixes.length === 0 ? (
+                  <EmptyState message="No priority fixes were returned." />
+                ) : (
+                  <div className="space-y-4">
+                    {priorityFixes.map((fix, index) => (
+                      <div
+                        key={`${fix.timestamp}-${index}`}
+                        className="border border-[var(--app-border)] bg-[var(--app-panel)] p-4"
+                      >
+                        <div className="mb-3 flex items-center justify-between gap-4">
+                          <span className="font-semibold text-[var(--app-text)]">
+                            {index + 1}. {fix.priority} Priority
+                          </span>
+
+                          <span className="font-mono text-sm text-[var(--app-accent)]">
+                            {fix.timestamp}
+                          </span>
+                        </div>
+
+                        <p className="font-medium text-[var(--app-text)]">
+                          {fix.issue}
+                        </p>
+
+                        <p className="mt-3 text-[var(--app-muted)]">
+                          <strong>Why it matters:</strong> {fix.why_it_matters}
+                        </p>
+
+                        <p className="mt-3 text-[var(--app-muted)]">
+                          <strong>Suggested improvement:</strong>{" "}
+                          {fix.suggested_improvement}
+                        </p>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                )}
+              </div>
+            )}
+
+            {activeTab === "accessibility" && (
+              <DimensionSection
+                title="Accessibility"
+                icon={Captions}
+                dimension={audit.accessibility}
+              />
+            )}
+
+            {activeTab === "equity" && (
+              <div className="space-y-8">
+                <DimensionSection
+                  title="Equity and Inclusion"
+                  icon={Users}
+                  dimension={audit.equity_and_inclusion}
+                />
+
+                <DimensionSection
+                  title="Pedagogical Clarity"
+                  icon={BookOpen}
+                  dimension={audit.pedagogical_clarity}
+                />
+              </div>
+            )}
+
+            {activeTab === "pacing" && (
+              <div className="space-y-8">
+                <DimensionSection
+                  title="Structure and Pacing"
+                  icon={Clock}
+                  dimension={audit.structure_and_pacing}
+                />
+
+                <DimensionSection
+                  title="Cognitive Load"
+                  icon={Brain}
+                  dimension={audit.cognitive_load}
+                />
+
+                <DimensionSection
+                  title="Student Engagement"
+                  icon={MessageSquare}
+                  dimension={audit.student_engagement}
+                />
+              </div>
+            )}
+
+            {activeTab === "rewrites" && (
+              <div>
+                <h3 className="mb-4 font-serif text-2xl font-semibold text-[var(--app-text)]">
+                  Timestamped Suggested Rewrites
+                </h3>
+
+                {rewrites.length === 0 ? (
+                  <EmptyState message="No timestamped rewrites were returned." />
+                ) : (
+                  <div className="space-y-4">
+                    {rewrites.map((rewrite, index) => (
+                      <div
+                        key={`${rewrite.timestamp}-${index}`}
+                        className="border border-[var(--app-border)] bg-[var(--app-panel)] p-4"
+                      >
+                        <div className="mb-3 font-mono text-sm font-semibold text-[var(--app-accent)]">
+                          {rewrite.timestamp}
+                        </div>
+
+                        <p className="text-[var(--app-text)]">
+                          <strong>Current issue:</strong>{" "}
+                          {rewrite.current_issue}
+                        </p>
+
+                        <p className="mt-3 text-[var(--app-text)]">
+                          <strong>Suggested rewrite:</strong>{" "}
+                          {rewrite.suggested_rewrite}
+                        </p>
+
+                        <p className="mt-3 text-[var(--app-muted)]">
+                          <strong>Why this helps:</strong>{" "}
+                          {rewrite.why_this_helps}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
-        )}
-      </div>
-    </section>
+        </aside>
+      </section>
+    </main>
   );
 }
 
 function TextBlock({ title, content }) {
   return (
     <div>
-      <h3 className="text-xl font-semibold text-slate-900 mb-3">{title}</h3>
-      <p className="text-slate-700 leading-7">
+      <h3 className="mb-3 font-serif text-2xl font-semibold text-[var(--app-text)]">
+        {title}
+      </h3>
+      <p className="leading-7 text-[var(--app-text)]">
         {content || "Insufficient evidence available."}
+      </p>
+    </div>
+  );
+}
+
+function Metric({ label, value }) {
+  return (
+    <div className="border border-[var(--app-border)] bg-[var(--app-panel-muted)] px-4 py-3">
+      <p className="font-mono text-2xl font-black text-[var(--app-text)]">
+        {value}
+      </p>
+      <p className="mt-1 text-xs font-bold uppercase tracking-[0.18em] text-[var(--app-soft)]">
+        {label}
       </p>
     </div>
   );
@@ -322,12 +379,14 @@ function DimensionSection({ title, icon: Icon, dimension }) {
 
   return (
     <div>
-      <div className="flex items-center gap-2 mb-3">
-        <Icon size={20} className="text-indigo-600" />
-        <h3 className="text-xl font-semibold text-slate-900">{title}</h3>
+      <div className="mb-3 flex items-center gap-2">
+        <Icon size={20} className="text-[var(--app-accent)]" />
+        <h3 className="font-serif text-2xl font-semibold text-[var(--app-text)]">
+          {title}
+        </h3>
       </div>
 
-      <p className="text-slate-700 leading-7 mb-5">
+      <p className="mb-5 leading-7 text-[var(--app-text)]">
         {data.summary || "Insufficient evidence available."}
       </p>
 
@@ -344,16 +403,22 @@ function DimensionSection({ title, icon: Icon, dimension }) {
 
 function ListCard({ title, items }) {
   return (
-    <div className="border border-slate-200 rounded-xl p-4">
-      <h4 className="font-semibold text-slate-900 mb-3">{title}</h4>
+    <div className="border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
+      <h4 className="mb-3 font-semibold text-[var(--app-text)]">{title}</h4>
 
       {items.length === 0 ? (
-        <p className="text-sm text-slate-500">No specific items returned.</p>
+        <p className="text-sm text-[var(--app-muted)]">
+          No specific items returned.
+        </p>
       ) : (
         <ul className="space-y-2">
           {items.map((item, index) => (
-            <li key={index} className="text-slate-700 text-sm leading-6">
-              • {item}
+            <li
+              key={index}
+              className="grid grid-cols-[1rem_1fr] gap-2 text-sm leading-6 text-[var(--app-text)]"
+            >
+              <span className="text-[var(--app-red)]">-</span>
+              <span>{item}</span>
             </li>
           ))}
         </ul>
@@ -364,7 +429,7 @@ function ListCard({ title, items }) {
 
 function EmptyState({ message }) {
   return (
-    <div className="border border-dashed border-slate-300 rounded-xl p-6 text-center text-slate-500">
+    <div className="border border-dashed border-[var(--app-border)] bg-[var(--app-panel)] p-6 text-center text-[var(--app-muted)]">
       {message}
     </div>
   );

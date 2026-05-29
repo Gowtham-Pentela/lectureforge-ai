@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import time
 import tempfile
 import subprocess
 from typing import List, Optional
@@ -87,10 +88,25 @@ class Agent1Ingestion:
 
         response = requests.get(
             endpoint,
-            params={"url": youtube_url},
+            params={
+                "url": youtube_url,
+                "lang": "en",
+                "mode": os.getenv("SUPADATA_TRANSCRIPT_MODE", "auto"),
+                "chunkSize": int(os.getenv("SUPADATA_CHUNK_SIZE", "1000")),
+            },
             headers={"x-api-key": api_key},
             timeout=60,
         )
+
+        if response.status_code == 202:
+            data = response.json()
+            job_id = data.get("jobId") or data.get("job_id")
+
+            if not job_id:
+                raise RuntimeError(f"Supadata returned 202 without a jobId: {data}")
+
+            data = self._poll_supadata_transcript_job(job_id, api_key)
+            return self._supadata_data_to_chunks(data)
 
         if response.status_code != 200:
             raise RuntimeError(
@@ -98,11 +114,61 @@ class Agent1Ingestion:
             )
 
         data = response.json()
+        return self._supadata_data_to_chunks(data)
 
+    def _poll_supadata_transcript_job(self, job_id: str, api_key: str) -> dict:
+        endpoint = f"https://api.supadata.ai/v1/transcript/{job_id}"
+        timeout_seconds = int(os.getenv("SUPADATA_JOB_TIMEOUT_SECONDS", "120"))
+        poll_interval = float(os.getenv("SUPADATA_JOB_POLL_INTERVAL_SECONDS", "1"))
+        deadline = time.monotonic() + timeout_seconds
+
+        while time.monotonic() < deadline:
+            response = requests.get(
+                endpoint,
+                headers={"x-api-key": api_key},
+                timeout=30,
+            )
+
+            if response.status_code != 200:
+                raise RuntimeError(
+                    f"Supadata job request failed with status {response.status_code}: {response.text}"
+                )
+
+            data = response.json()
+            status = str(data.get("status", "")).lower()
+
+            if status == "completed":
+                result = data.get("result")
+                if isinstance(result, dict):
+                    return result
+
+                return data
+
+            if status == "failed":
+                raise RuntimeError(f"Supadata transcript job failed: {data}")
+
+            time.sleep(poll_interval)
+
+        raise RuntimeError(
+            f"Supadata transcript job timed out after {timeout_seconds} seconds"
+        )
+
+    def _supadata_data_to_chunks(self, data: dict) -> List[TranscriptChunk]:
         content = data.get("content")
 
         if not content:
             raise RuntimeError("Supadata returned no transcript content")
+
+        if isinstance(content, str):
+            content = [
+                {
+                    "text": paragraph.strip(),
+                    "offset": index * 15000,
+                    "duration": 15000,
+                }
+                for index, paragraph in enumerate(content.splitlines())
+                if paragraph.strip()
+            ]
 
         chunks = []
 

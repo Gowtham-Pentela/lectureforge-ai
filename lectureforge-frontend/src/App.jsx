@@ -483,7 +483,10 @@ export default function App() {
         )}
 
         {mode === "faculty" && facultyAudit && (
-          <FacultyAuditDashboard audit={facultyAudit} />
+          <FacultyAuditDashboard
+            audit={facultyAudit}
+            sourceVideoUrl={sourceVideoUrl}
+          />
         )}
       </main>
     </div>

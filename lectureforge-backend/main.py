@@ -233,6 +233,18 @@ async def run_faculty_audit_pipeline(job_id: str, youtube_url: str):
         job_store.update_job(
             job_id,
             status="processing",
+            progress=25,
+            message="Normalizing transcript to English for faculty audit",
+        )
+
+        transcript_chunks = await asyncio.to_thread(
+            normalize_transcript_chunks_to_english,
+            transcript_chunks,
+        )
+
+        job_store.update_job(
+            job_id,
+            status="processing",
             progress=35,
             message=f"Transcript ready with {len(transcript_chunks)} chunks. Agent 2 is identifying lecture title and structure",
         )
@@ -849,7 +861,7 @@ def build_live_agent_context(study_kit, request: LiveAgentRequest):
 
 
 def normalize_transcript_chunks_to_english(transcript_chunks):
-    if not transcript_chunks or transcript_looks_english(transcript_chunks):
+    if not transcript_chunks:
         return transcript_chunks
 
     normalized_chunks = []
@@ -868,7 +880,7 @@ def normalize_transcript_chunks_to_english(transcript_chunks):
         ]
 
         system_prompt = """
-You translate lecture transcript chunks into English.
+You convert noisy lecture transcript chunks into clear English.
 
 Return valid JSON only.
 
@@ -884,14 +896,19 @@ Schema:
 
 Rules:
 - Translate all non-English text into natural English.
-- If a chunk is already English, keep it in English and lightly clean it.
-- Preserve meaning. Do not summarize.
+- Repair noisy ASR, romanized Telugu/Hindi/Indian-English code-mixed phrases, and literal word salad into coherent English.
+- If a chunk mixes English words with non-English grammar, infer the intended lecture meaning and rewrite it in natural English.
+- If a chunk is already clear English, keep it in English and lightly clean it.
+- Preserve meaning and important details. Do not summarize.
 - Preserve the index values exactly.
 """
 
         translated = generate_json(
             system_prompt=system_prompt,
-            user_prompt=f"Translate these transcript chunks into English:\n{payload}",
+            user_prompt=(
+                "Convert these transcript chunks into clear English JSON.\n"
+                f"{json.dumps(payload, ensure_ascii=False)}"
+            ),
         )
 
         translated_by_index = {
