@@ -26,8 +26,12 @@ class Agent1Ingestion:
         try:
             chunks = self._get_supadata_transcript(youtube_url)
             if chunks and len(chunks) > 3:
-                print(f"Supadata transcript extraction succeeded with {len(chunks)} chunks")
-                return merge_small_chunks(chunks)
+                if self._chunks_look_english(chunks):
+                    print(f"Supadata transcript extraction succeeded with {len(chunks)} chunks")
+                    return merge_small_chunks(chunks)
+
+                errors.append("Supadata returned non-English transcript; trying translatable captions")
+                print("Supadata returned non-English transcript; trying translatable captions")
 
             errors.append("Supadata returned too few chunks")
         except Exception as e:
@@ -175,36 +179,68 @@ class Agent1Ingestion:
                 last_error = e
 
         if transcript_data is None:
-            try:
-                transcript_list = api.list(video_id)
+            transcript_data = self._fetch_translated_transcript_from_list(
+                api=api,
+                video_id=video_id,
+                last_error=last_error,
+            )
 
-                selected = None
+        chunks = self._transcript_data_to_chunks(transcript_data)
 
+        if chunks and not self._chunks_look_english(chunks):
+            translated_transcript_data = self._fetch_translated_transcript_from_list(
+                api=api,
+                video_id=video_id,
+                last_error="Direct caption fetch returned non-English text",
+            )
+            translated_chunks = self._transcript_data_to_chunks(translated_transcript_data)
+
+            if translated_chunks and self._chunks_look_english(translated_chunks):
+                return translated_chunks
+
+        return chunks
+
+    def _fetch_translated_transcript_from_list(self, api, video_id: str, last_error):
+        try:
+            transcript_list = api.list(video_id)
+
+            selected = None
+
+            for transcript in transcript_list:
+                if transcript.language_code.startswith("en"):
+                    selected = transcript
+                    break
+
+            if selected is None:
                 for transcript in transcript_list:
-                    if transcript.language_code.startswith("en"):
-                        selected = transcript
+                    if transcript.is_translatable:
+                        selected = transcript.translate("en")
                         break
 
-                if selected is None:
-                    for transcript in transcript_list:
-                        selected = transcript
-                        break
+            if selected is None:
+                for transcript in transcript_list:
+                    selected = transcript
+                    break
 
-                if selected is None:
-                    raise RuntimeError("No transcripts found for this video")
+            if selected is None:
+                raise RuntimeError("No transcripts found for this video")
 
-                if selected.is_translatable:
-                    selected = selected.translate("en")
+            if (
+                not selected.language_code.startswith("en")
+                and selected.is_translatable
+            ):
+                selected = selected.translate("en")
 
-                transcript_data = selected.fetch()
+            return selected.fetch()
 
-            except Exception as e:
-                raise RuntimeError(
-                    f"Transcript API could not fetch captions. "
-                    f"Last direct fetch error: {last_error}. "
-                    f"List/fetch error: {e}"
-                )
+        except Exception as e:
+            raise RuntimeError(
+                f"Transcript API could not fetch English captions. "
+                f"Last direct fetch error: {last_error}. "
+                f"List/fetch error: {e}"
+            )
 
+    def _transcript_data_to_chunks(self, transcript_data) -> List[TranscriptChunk]:
         chunks = []
 
         for item in transcript_data:
@@ -234,6 +270,40 @@ class Agent1Ingestion:
             return item.get(key, default)
 
         return getattr(item, key, default)
+
+    def _chunks_look_english(self, chunks: List[TranscriptChunk]) -> bool:
+        sample = " ".join(chunk.text for chunk in chunks[:12])
+
+        if not sample.strip():
+            return True
+
+        ascii_letters = sum(1 for char in sample if char.isascii() and char.isalpha())
+        non_ascii_letters = sum(1 for char in sample if not char.isascii() and char.isalpha())
+
+        if non_ascii_letters > ascii_letters * 0.2:
+            return False
+
+        common_words = {
+            "the",
+            "and",
+            "to",
+            "of",
+            "in",
+            "that",
+            "is",
+            "for",
+            "with",
+            "this",
+            "you",
+            "we",
+            "are",
+        }
+        words = [
+            word.strip(".,!?;:()[]{}\"'").lower()
+            for word in sample.split()
+        ]
+
+        return sum(1 for word in words if word in common_words) >= 3 or non_ascii_letters == 0
 
     def _run_command(self, command: List[str]):
         result = subprocess.run(

@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { RotateCcw, Clock3, ExternalLink } from "lucide-react";
+import { buildYouTubeJumpUrl, formatTime } from "../lib/youtube";
 
 export default function FlashcardsTab({
   flashcards = [],
@@ -9,7 +10,7 @@ export default function FlashcardsTab({
 
   if (!flashcards.length) {
     return (
-      <div className="rounded-3xl border border-slate-200 bg-white p-5 text-sm text-slate-600 shadow-sm">
+      <div className="rounded-md border border-[var(--app-border)] bg-[var(--app-panel)] p-5 text-sm text-[var(--app-muted)]">
         No flashcards were generated for this lecture.
       </div>
     );
@@ -32,10 +33,10 @@ export default function FlashcardsTab({
         return (
           <article
             key={`${card.question}-${index}`}
-            className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
+            className="rounded-md border border-[var(--app-border)] bg-[var(--app-panel)] p-5 shadow-[0_10px_24px_rgba(15,23,42,0.08)]"
           >
             <div className="mb-4 flex items-start justify-between gap-3">
-              <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+              <div className="inline-flex items-center gap-2 rounded bg-[var(--app-accent-soft)] px-2 py-1 font-mono text-xs font-bold text-[var(--app-accent-strong)]">
                 <Clock3 className="h-4 w-4" />
                 Source: {card.timestamp_time || formatTime(timestampSeconds)}
               </div>
@@ -45,7 +46,7 @@ export default function FlashcardsTab({
                   href={jumpUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
+                  className="inline-flex items-center gap-1 rounded bg-[var(--app-panel-muted)] px-2 py-1 text-xs font-bold text-[var(--app-accent)] transition hover:bg-[var(--app-accent-soft)]"
                 >
                   <ExternalLink className="h-3.5 w-3.5" />
                   Open
@@ -58,26 +59,26 @@ export default function FlashcardsTab({
               onClick={() => toggleCard(index)}
               className="w-full text-left"
             >
-              <div className="min-h-[150px] rounded-2xl border border-slate-200 bg-slate-50 p-4 transition hover:border-blue-200 hover:bg-blue-50/40">
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-blue-600">
+              <div className="min-h-[150px] rounded-md border border-[var(--app-border)] bg-[var(--app-panel-muted)] p-4 transition hover:border-[var(--app-accent)]">
+                <p className="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-[var(--app-accent)]">
                   {isFlipped ? "Answer" : "Question"}
                 </p>
 
-                <p className="text-sm leading-7 text-slate-800">
+                <p className="font-serif text-lg leading-7 text-[var(--app-text)]">
                   {isFlipped ? card.answer : card.question}
                 </p>
               </div>
             </button>
 
             <div className="mt-4 flex items-center justify-between gap-3">
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-[var(--app-muted)]">
                 Click the card to reveal {isFlipped ? "question" : "answer"}.
               </p>
 
               <button
                 type="button"
                 onClick={() => toggleCard(index)}
-                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+                className="inline-flex items-center gap-2 rounded-md border border-[var(--app-border)] bg-[var(--app-panel)] px-3 py-2 text-xs font-bold text-[var(--app-muted)] transition hover:bg-[var(--app-panel-muted)]"
               >
                 <RotateCcw className="h-4 w-4" />
                 Flip
@@ -88,50 +89,4 @@ export default function FlashcardsTab({
       })}
     </div>
   );
-}
-
-function buildYouTubeJumpUrl(url, startSeconds) {
-  if (!url) {
-    return "";
-  }
-
-  try {
-    const parsedUrl = new URL(url);
-
-    parsedUrl.searchParams.delete("t");
-    parsedUrl.searchParams.delete("start");
-
-    if (parsedUrl.hostname.includes("youtu.be")) {
-      parsedUrl.searchParams.set("t", `${startSeconds}s`);
-      return parsedUrl.toString();
-    }
-
-    if (parsedUrl.hostname.includes("youtube.com")) {
-      parsedUrl.searchParams.set("t", `${startSeconds}s`);
-      return parsedUrl.toString();
-    }
-
-    return "";
-  } catch {
-    return "";
-  }
-}
-
-function formatTime(seconds) {
-  if (
-    seconds === null ||
-    seconds === undefined ||
-    Number.isNaN(Number(seconds))
-  ) {
-    return "00:00:00";
-  }
-
-  const totalSeconds = Math.floor(Number(seconds));
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const secs = totalSeconds % 60;
-
-  return [hours, minutes, secs]
-    .map((value) => String(value).padStart(2, "0"))
-    .join(":");
 }

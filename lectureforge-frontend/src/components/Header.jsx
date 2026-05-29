@@ -1,25 +1,75 @@
 import React from "react";
-import { BrainCircuit, Sparkles } from "lucide-react";
+import { Globe2, Moon, RotateCw, Sun, Zap } from "lucide-react";
 
-export default function Header() {
+export default function Header({ onNewLecture, onThemeToggle, theme }) {
+  const isDark = theme === "dark";
+
   return (
-    <header className="mb-8 flex flex-col gap-5 rounded-[2rem] bg-slate-950 px-6 py-8 text-white shadow-soft md:flex-row md:items-center md:justify-between md:px-8">
-      <div>
-        <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-sm text-blue-100">
-          <Sparkles size={15} />
-          AI study kit from YouTube lectures
-        </div>
-        <h1 className="text-3xl font-bold tracking-tight md:text-5xl">
-          LectureForge AI
-        </h1>
-        <p className="mt-3 max-w-2xl text-base leading-7 text-slate-300">
-          Paste a YouTube lecture URL. Get a timestamped outline, summaries,
-          flashcards, a concept map, and semantic search.
-        </p>
-      </div>
+    <header className="sticky top-0 z-30 bg-[var(--app-bg)]/95 px-4 py-5 backdrop-blur sm:px-6">
+      <div className="mx-auto flex min-h-20 max-w-7xl items-center justify-between rounded-full border border-[var(--app-border)] bg-white/90 px-5 shadow-[0_12px_38px_rgba(20,20,20,0.06)] sm:px-7">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 text-[var(--app-text)]">
+            <span className="grid h-9 w-9 rotate-[-12deg] place-items-center rounded-xl bg-[var(--app-purple)] text-white">
+              <Zap className="h-5 w-5 fill-current" />
+            </span>
+            <span className="text-3xl font-black tracking-[-0.04em]">
+              LectureForge
+            </span>
+          </div>
 
-      <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-blue-500/20">
-        <BrainCircuit size={42} className="text-blue-200" />
+          <button
+            type="button"
+            onClick={onNewLecture}
+            className="hidden items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold text-[var(--app-muted)] transition hover:bg-[var(--app-panel-muted)] lg:inline-flex"
+          >
+            <RotateCw className="h-4 w-4" />
+            New lecture
+          </button>
+        </div>
+
+        <nav className="hidden items-center gap-8 text-lg font-semibold text-[var(--app-text)] lg:flex">
+          <a href="#input" className="transition hover:text-[var(--app-accent)]">
+            Tools
+          </a>
+          <a href="#input" className="transition hover:text-[var(--app-accent)]">
+            Mind Maps
+          </a>
+          <a href="#input" className="transition hover:text-[var(--app-accent)]">
+            Faculty
+          </a>
+        </nav>
+
+        <div className="flex items-center gap-3 text-[var(--app-muted)]">
+          <button
+            type="button"
+            onClick={onThemeToggle}
+            className="grid h-11 w-11 place-items-center rounded-full transition hover:bg-[var(--app-panel-muted)]"
+            aria-label={isDark ? "Switch to light theme" : "Switch to dark theme"}
+          >
+            {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          </button>
+
+          <button
+            type="button"
+            className="hidden h-11 items-center gap-2 rounded-full px-3 text-sm font-semibold text-[var(--app-text)] transition hover:bg-[var(--app-panel-muted)] sm:inline-flex"
+          >
+            <Globe2 className="h-4 w-4" />
+          </button>
+
+          <button
+            type="button"
+            className="hidden h-11 items-center rounded-xl bg-[var(--app-purple)] px-6 text-base font-bold text-white shadow-sm transition hover:opacity-90 sm:inline-flex"
+          >
+            Sign in
+          </button>
+
+          <button
+            type="button"
+            className="hidden h-11 items-center rounded-xl bg-[var(--app-accent)] px-6 text-base font-bold text-white shadow-sm transition hover:bg-[var(--app-accent-strong)] sm:inline-flex"
+          >
+            Start for free
+          </button>
+        </div>
       </div>
     </header>
   );

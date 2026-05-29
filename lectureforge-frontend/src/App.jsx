@@ -1,4 +1,13 @@
 import React, { useState } from "react";
+import {
+  BrainCircuit,
+  FileText,
+  GraduationCap,
+  Link2,
+  ShieldCheck,
+  Sparkles,
+  Youtube,
+} from "lucide-react";
 import Header from "./components/Header";
 import VideoForm from "./components/VideoForm";
 import ProgressCard from "./components/ProgressCard";
@@ -26,6 +35,25 @@ export default function App() {
   const [error, setError] = useState("");
   const [isTranslating, setIsTranslating] = useState(false);
   const [translationProgress, setTranslationProgress] = useState({});
+  const [lectureFormKey, setLectureFormKey] = useState(0);
+  const [theme, setTheme] = useState("light");
+
+  function resetLectureWorkspace() {
+    if (isProcessing || isTranslating) {
+      return;
+    }
+
+    setJobId(null);
+    setStudyKit(null);
+    setEnglishStudyKit(null);
+    setFacultyAudit(null);
+    setSelectedLanguage("English");
+    setSourceVideoUrl("");
+    setJobStatus(null);
+    setError("");
+    setTranslationProgress({});
+    setLectureFormKey((previous) => previous + 1);
+  }
 
   async function handleProcessVideo(youtubeUrl) {
     try {
@@ -203,6 +231,7 @@ export default function App() {
     setJobStatus(null);
     setError("");
     setTranslationProgress({});
+    setLectureFormKey((previous) => previous + 1);
   }
 
   async function handleLanguageChange(language) {
@@ -361,84 +390,82 @@ export default function App() {
     jobStatus?.status === "queued" || jobStatus?.status === "processing";
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
-      <Header />
+    <div
+      data-theme={theme}
+      className="min-h-screen bg-[var(--app-bg)] text-[var(--app-text)]"
+    >
+      <Header
+        onNewLecture={resetLectureWorkspace}
+        onThemeToggle={() =>
+          setTheme((currentTheme) =>
+            currentTheme === "dark" ? "light" : "dark"
+          )
+        }
+        theme={theme}
+      />
 
-      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        <section className="mb-8">
-          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="mb-6">
-              <p className="text-sm font-semibold uppercase tracking-wide text-blue-600">
-                LectureForge AI
-              </p>
+      <main className="px-4 pb-6 sm:px-6">
+        {!studyKit && !facultyAudit && !jobStatus && (
+          <section className="relative mx-auto mb-8 min-h-[calc(100vh-8rem)] max-w-7xl overflow-hidden py-12 text-center sm:py-20">
+            <FloatingHeroDecor />
 
-              <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
-                {mode === "faculty"
-                  ? "Improve lectures before students see them"
-                  : "Turn YouTube lectures into study kits"}
+            <div className="relative z-10 mx-auto flex max-w-5xl flex-col items-center">
+              <div className="mb-7 rounded-full border-4 border-[var(--app-red)] bg-[var(--app-red-soft)] px-6 py-3 text-xl font-black text-[var(--app-red)] sm:text-2xl">
+                YouTube Video Summarizer
+              </div>
+
+              <h1 className="max-w-5xl text-6xl font-black leading-[0.98] tracking-[-0.055em] text-black sm:text-7xl lg:text-8xl">
+                Instant YouTube Video Summarizer with Mind Maps
               </h1>
 
-              <p className="mt-3 max-w-3xl text-base leading-7 text-slate-600">
-                {mode === "faculty"
-                  ? "Paste a lecture URL to generate a private, instructor-facing audit across clarity, accessibility, equity, pacing, cognitive load, and student engagement."
-                  : "Paste a YouTube lecture URL. LectureForge processes the video once in English, then progressively translates the generated study material section by section without reprocessing the video."}
+              <p className="mt-8 max-w-3xl text-2xl font-semibold leading-9 text-[var(--app-muted)]">
+                Instantly create mind map summaries, study kits, and faculty
+                reviews from any YouTube lecture.
               </p>
-            </div>
 
-            <div className="mb-6 flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={() => handleModeChange("student")}
-                disabled={isProcessing || isTranslating}
-                className={`rounded-xl border px-4 py-2 text-sm font-semibold transition ${
-                  mode === "student"
-                    ? "border-slate-950 bg-slate-950 text-white"
-                    : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                } disabled:cursor-not-allowed disabled:opacity-60`}
+              <div className="mt-8 inline-flex rounded-2xl border border-[var(--app-border)] bg-white/75 p-1 shadow-sm">
+                <ModePill
+                  active={mode === "student"}
+                  label="Study kit"
+                  onClick={() => handleModeChange("student")}
+                  disabled={isProcessing || isTranslating}
+                />
+                <ModePill
+                  active={mode === "faculty"}
+                  label="Faculty review"
+                  onClick={() => handleModeChange("faculty")}
+                  disabled={isProcessing || isTranslating}
+                />
+              </div>
+
+              <div
+                id="input"
+                className="mt-10 w-full max-w-4xl"
               >
-                Student Study Mode
-              </button>
+                <VideoForm
+                  key={lectureFormKey}
+                  onSubmit={handleProcessVideo}
+                  disabled={isProcessing || isTranslating}
+                  mode={mode}
+                />
+              </div>
 
-              <button
-                type="button"
-                onClick={() => handleModeChange("faculty")}
-                disabled={isProcessing || isTranslating}
-                className={`rounded-xl border px-4 py-2 text-sm font-semibold transition ${
-                  mode === "faculty"
-                    ? "border-slate-950 bg-slate-950 text-white"
-                    : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                } disabled:cursor-not-allowed disabled:opacity-60`}
-              >
-                Faculty Audit Mode
-              </button>
+              <SpeedUpgradeStats />
             </div>
-
-            <VideoForm
-              onSubmit={handleProcessVideo}
-              disabled={isProcessing || isTranslating}
-              mode={mode}
-            />
-
-            {mode === "faculty" && (
-              <p className="mt-4 text-sm leading-6 text-slate-500">
-                Faculty reports are private, voluntary, and designed for lecture
-                improvement only. They are not evaluations or surveillance.
-              </p>
-            )}
-          </div>
-        </section>
+          </section>
+        )}
 
         {jobStatus &&
           (jobStatus.status === "queued" ||
             jobStatus.status === "processing" ||
             jobStatus.status === "failed") && (
-            <div className="mb-6">
-              <ProgressCard status={jobStatus} />
+            <div className="-mx-4 sm:-mx-6">
+              <ProgressCard status={jobStatus} mode={mode} />
             </div>
           )}
 
         {error && jobStatus?.status !== "failed" && (
-          <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div className="mx-auto mb-6 max-w-5xl rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {error}
           </div>
         )}
@@ -545,4 +572,157 @@ function normalizeTranslatedSectionData(section, data) {
   }
 
   return data;
+}
+
+function ModePill({ active, label, onClick, disabled }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`rounded-xl px-5 py-2.5 text-base font-bold transition disabled:cursor-not-allowed disabled:opacity-60 ${
+        active
+          ? "bg-[var(--app-accent)] text-white shadow-sm"
+          : "text-[var(--app-muted)] hover:text-[var(--app-text)]"
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
+function FloatingHeroDecor() {
+  return (
+    <div className="pointer-events-none absolute inset-0 hidden lg:block">
+      <div className="absolute left-0 top-24 rotate-[-14deg] rounded-2xl bg-white px-9 py-6 text-4xl font-black italic text-black shadow-[0_18px_50px_rgba(0,0,0,0.12)]">
+        YouTube
+      </div>
+
+      <div className="absolute left-20 top-[18rem] rotate-[13deg] overflow-hidden rounded-2xl border-[10px] border-white bg-slate-900 shadow-[0_20px_55px_rgba(0,0,0,0.18)]">
+        <div className="grid h-24 w-44 place-items-center bg-gradient-to-br from-slate-900 via-blue-950 to-indigo-700">
+          <div className="grid h-12 w-12 place-items-center rounded-full bg-white/90 text-[var(--app-accent)]">
+            <Youtube className="h-6 w-6 fill-current" />
+          </div>
+        </div>
+      </div>
+
+      <div className="absolute right-2 top-24 rotate-[-17deg] overflow-hidden rounded-2xl border-[10px] border-white bg-slate-100 shadow-[0_20px_55px_rgba(0,0,0,0.16)]">
+        <div className="grid h-24 w-44 place-items-center bg-gradient-to-br from-white via-slate-100 to-slate-300">
+          <div className="text-3xl font-black text-slate-700">E=mc²</div>
+        </div>
+      </div>
+
+      <div className="absolute right-24 top-[21rem] rotate-[-10deg] rounded-3xl bg-[var(--app-red)] p-5 text-white shadow-[0_18px_40px_rgba(239,52,52,0.28)]">
+        <Youtube className="h-12 w-12" />
+      </div>
+
+      <div className="absolute left-[18%] top-[21rem] h-14 w-20 rounded-l-2xl border-l-4 border-t-4 border-[var(--app-red)]" />
+      <div className="absolute right-[12%] top-[21rem] h-1 w-28 rounded-full bg-[var(--app-red)]" />
+    </div>
+  );
+}
+
+function MapifyPreview() {
+  const branches = [
+    {
+      title: "Extract transcript",
+      icon: <Youtube className="h-4 w-4" />,
+      nodes: ["Captions", "Chapters", "Timestamps"],
+      className: "left-[5%] top-[14%]",
+    },
+    {
+      title: "Build mind map",
+      icon: <BrainCircuit className="h-4 w-4" />,
+      nodes: ["Main ideas", "Dependencies", "Cross-links"],
+      className: "right-[3%] top-[20%]",
+    },
+    {
+      title: "Create study assets",
+      icon: <FileText className="h-4 w-4" />,
+      nodes: ["Summary", "Flashcards", "Search"],
+      className: "left-[10%] bottom-[11%]",
+    },
+    {
+      title: "Open workspace",
+      icon: <Link2 className="h-4 w-4" />,
+      nodes: ["Watch", "Ask", "Review"],
+      className: "right-[8%] bottom-[9%]",
+    },
+  ];
+
+  return (
+    <div className="relative min-h-[560px] overflow-hidden rounded-[2rem] border border-[var(--app-border)] bg-[radial-gradient(circle_at_50%_45%,var(--app-accent-soft),transparent_34%),var(--app-panel)] p-6 shadow-[0_30px_90px_rgba(15,23,42,0.12)]">
+      <div className="absolute left-1/2 top-1/2 z-10 w-48 -translate-x-1/2 -translate-y-1/2 rounded-3xl border border-[var(--app-accent)] bg-[var(--app-panel)] p-5 text-center shadow-[0_22px_60px_rgba(37,99,235,0.20)]">
+        <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-[var(--app-accent)] text-white">
+          <BrainCircuit className="h-6 w-6" />
+        </div>
+        <div className="font-serif text-xl font-semibold text-[var(--app-text)]">
+          LectureForge map
+        </div>
+        <p className="mt-1 text-xs leading-5 text-[var(--app-muted)]">
+          One link becomes a connected learning graph.
+        </p>
+      </div>
+
+      <svg
+        className="absolute inset-0 h-full w-full text-[var(--app-accent)] opacity-70"
+        viewBox="0 0 720 560"
+        role="img"
+        aria-label="Mind map preview connections"
+      >
+        <path d="M360 280 C250 170 170 130 95 120" fill="none" stroke="currentColor" strokeWidth="3" />
+        <path d="M360 280 C470 160 555 135 650 155" fill="none" stroke="currentColor" strokeWidth="3" />
+        <path d="M360 280 C250 390 170 430 105 445" fill="none" stroke="currentColor" strokeWidth="3" />
+        <path d="M360 280 C478 388 560 426 635 430" fill="none" stroke="currentColor" strokeWidth="3" />
+      </svg>
+
+      {branches.map((branch) => (
+        <div
+          key={branch.title}
+          className={`absolute z-20 w-52 rounded-2xl border border-[var(--app-border)] bg-[var(--app-panel)] p-4 shadow-[0_18px_45px_rgba(15,23,42,0.10)] ${branch.className}`}
+        >
+          <div className="mb-3 flex items-center gap-2 font-serif text-lg font-semibold text-[var(--app-text)]">
+            <span className="grid h-8 w-8 place-items-center rounded-xl bg-[var(--app-accent-soft)] text-[var(--app-accent)]">
+              {branch.icon}
+            </span>
+            {branch.title}
+          </div>
+
+          <div className="grid gap-2">
+            {branch.nodes.map((node) => (
+              <div
+                key={node}
+                className="rounded-xl border border-[var(--app-border)] bg-[var(--app-panel-muted)] px-3 py-2 text-sm font-semibold text-[var(--app-muted)]"
+              >
+                {node}
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SpeedUpgradeStats() {
+  return (
+    <div className="mt-6 grid max-w-2xl gap-3 sm:grid-cols-3">
+      <StatCard value="4 -> 2" label="core generation calls" />
+      <StatCard value="-50%" label="LLM round trips" />
+      <StatCard value="-67%" label="study asset calls" />
+    </div>
+  );
+}
+
+function StatCard({ value, label }) {
+  return (
+    <div className="rounded-2xl border border-[var(--app-border)] bg-[var(--app-panel)] px-4 py-3">
+      <div className="font-serif text-2xl font-semibold text-[var(--app-text)]">
+        {value}
+      </div>
+      <div className="mt-1 text-xs font-bold uppercase tracking-[0.18em] text-[var(--app-soft)]">
+        {label}
+      </div>
+    </div>
+  );
 }

@@ -19,6 +19,10 @@ Try LectureForge AI here:
 https://lectureforge-ai.vercel.app/ 
 ```
 
+## Mobile Packaging
+
+The app is scaffolded for iOS and Android with Capacitor. See [MOBILE_RELEASE.md](MOBILE_RELEASE.md) for the backend deployment, mobile build, App Store, and Play Store release checklist.
+
 LectureForge AI is designed for students who want to study efficiently and faculty who want private, practical feedback before publishing or improving a lecture.
 
 ---

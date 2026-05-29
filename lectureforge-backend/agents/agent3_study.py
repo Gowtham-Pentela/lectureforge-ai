@@ -22,9 +22,14 @@ class Agent3Study:
     ) -> StudyKit:
         transcript_text = transcript_to_plain_text(transcript_chunks)
 
-        summaries = self._generate_summaries(transcript_text)
-        flashcards = self._generate_flashcards(transcript_text)
-        concept_map = self._generate_concept_map(transcript_text)
+        generated_assets = self._generate_study_assets(
+            transcript_text=transcript_text,
+            analysis=analysis,
+        )
+
+        summaries = generated_assets["summaries"]
+        flashcards = generated_assets["flashcards"]
+        concept_map = generated_assets["concept_map"]
 
         bilingual_output = None
         if target_language and target_language.lower() != "english":
@@ -43,6 +48,132 @@ class Agent3Study:
             concept_map=concept_map,
             bilingual_output=bilingual_output,
         )
+
+    def _generate_study_assets(
+        self,
+        transcript_text: str,
+        analysis: LectureAnalysis,
+    ) -> Dict[str, Any]:
+        outline_payload = [
+            {
+                "title": item.title,
+                "start": item.start,
+                "end": item.end,
+                "summary": item.summary,
+            }
+            for item in analysis.outline
+        ]
+        concepts_payload = [
+            {
+                "concept": item.concept,
+                "explanation": item.explanation,
+                "timestamp": item.timestamp,
+            }
+            for item in analysis.key_concepts
+        ]
+
+        system_prompt = """
+You are an expert study assistant and concept-map designer.
+
+Create all student study assets in one pass.
+
+Return valid JSON only.
+
+Schema:
+{
+  "summaries": {
+    "short_summary": "string",
+    "medium_summary": "string",
+    "full_summary": "string"
+  },
+  "flashcards": [
+    {
+      "question": "string",
+      "answer": "string",
+      "timestamp": number
+    }
+  ],
+  "concept_map": {
+    "nodes": [
+      {
+        "id": "short_unique_id",
+        "label": "Human readable concept name",
+        "type": "main_topic | subtopic | detail",
+        "timestamp": number
+      }
+    ],
+    "edges": [
+      {
+        "source": "node_id",
+        "target": "node_id",
+        "label": "relationship"
+      }
+    ]
+  }
+}
+
+Rules:
+- Create 10 to 15 flashcards.
+- Flashcard questions should test understanding, not memorization.
+- Every flashcard must include a timestamp in seconds from the source moment.
+- Concept map nodes should represent the lecture's idea hierarchy, not a flat list.
+- Concept map edges must explain how ideas depend on, contrast with, enable, or lead to each other.
+- Every concept map edge must refer to an existing node id.
+- Prefer 8 to 15 concept map nodes.
+- Use stable lowercase ids with underscores.
+"""
+
+        user_prompt = f"""
+Lecture outline:
+{outline_payload}
+
+Key concepts:
+{concepts_payload}
+
+Transcript:
+{transcript_text}
+"""
+
+        data = generate_json(system_prompt, user_prompt)
+        summaries_data = data.get("summaries", {})
+        concept_map_data = data.get("concept_map", {})
+
+        return {
+            "summaries": SummarySet(
+                short_summary=summaries_data.get("short_summary", ""),
+                medium_summary=summaries_data.get("medium_summary", ""),
+                full_summary=summaries_data.get("full_summary", ""),
+            ),
+            "flashcards": [
+                Flashcard(
+                    question=item.get("question", ""),
+                    answer=item.get("answer", ""),
+                    timestamp=float(item.get("timestamp", 0)),
+                )
+                for item in data.get("flashcards", [])
+            ],
+            "concept_map": ConceptMap(
+                nodes=[
+                    ConceptMapNode(
+                        id=item.get("id", ""),
+                        label=item.get("label", ""),
+                        type=item.get("type", "concept"),
+                        timestamp=float(item.get("timestamp", 0))
+                        if item.get("timestamp") is not None
+                        else None,
+                    )
+                    for item in concept_map_data.get("nodes", [])
+                ],
+                edges=[
+                    ConceptMapEdge(
+                        source=item.get("source", ""),
+                        target=item.get("target", ""),
+                        label=item.get("label", ""),
+                    )
+                    for item in concept_map_data.get("edges", [])
+                ],
+            ),
+        }
 
     def _generate_summaries(self, transcript_text: str) -> SummarySet:
         system_prompt = """

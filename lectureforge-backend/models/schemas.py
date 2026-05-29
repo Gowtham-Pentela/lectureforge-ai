@@ -47,6 +47,7 @@ class ConceptMapNode(BaseModel):
     id: str
     label: str
     type: Optional[str] = "concept"
+    timestamp: Optional[float] = None
 
 
 class ConceptMapEdge(BaseModel):
@@ -128,6 +129,20 @@ class SearchResult(BaseModel):
 class SearchResponse(BaseModel):
     query: str
     results: List[SearchResult]
+
+
+class LiveAgentRequest(BaseModel):
+    job_id: str
+    message: str
+    active_tab: Optional[str] = "outline"
+    target_language: Optional[str] = "English"
+    screen_shared: bool = False
+    voice_enabled: bool = False
+
+
+class LiveAgentResponse(BaseModel):
+    reply: str
+    context_cards: List[str] = Field(default_factory=list)
 
 
 class FacultyAuditRequest(BaseModel):

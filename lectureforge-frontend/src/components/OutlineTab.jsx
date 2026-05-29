@@ -1,10 +1,11 @@
 import React from "react";
 import { Clock3, ExternalLink } from "lucide-react";
+import { buildYouTubeJumpUrl, formatTime } from "../lib/youtube";
 
 export default function OutlineTab({ outline = [], sourceVideoUrl = "" }) {
   if (!outline.length) {
     return (
-      <div className="rounded-3xl border border-slate-200 bg-white p-5 text-sm text-slate-600 shadow-sm">
+      <div className="rounded-md border border-[var(--app-border)] bg-[var(--app-panel)] p-5 text-sm text-[var(--app-muted)]">
         No outline was generated for this lecture.
       </div>
     );
@@ -20,19 +21,24 @@ export default function OutlineTab({ outline = [], sourceVideoUrl = "" }) {
         return (
           <article
             key={`${item.title}-${index}`}
-            className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
+            className="border-b border-[var(--app-border)] px-1 py-5 last:border-b-0"
           >
             <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+              <div className="grid gap-3 sm:grid-cols-[2rem_1fr]">
+                <div className="pt-1 font-mono text-sm font-bold text-[var(--app-muted)]">
+                  {String(index + 1).padStart(2, "0")}
+                </div>
+                <div>
+                  <div className="mb-2 inline-flex items-center gap-2 rounded bg-[var(--app-accent-soft)] px-2 py-1 font-mono text-xs font-bold text-[var(--app-accent-strong)]">
                   <Clock3 className="h-4 w-4" />
                   {item.start_time || formatTime(startSeconds)} -{" "}
                   {item.end_time || formatTime(endSeconds)}
                 </div>
 
-                <h3 className="text-lg font-bold text-slate-950">
-                  {item.title}
-                </h3>
+                  <h3 className="font-serif text-2xl font-semibold text-[var(--app-text)]">
+                    {item.title}
+                  </h3>
+                </div>
               </div>
 
               {jumpUrl && (
@@ -40,7 +46,7 @@ export default function OutlineTab({ outline = [], sourceVideoUrl = "" }) {
                   href={jumpUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 transition hover:border-blue-300 hover:bg-blue-100"
+                  className="inline-flex items-center justify-center gap-2 rounded-md border border-[var(--app-border)] bg-[var(--app-panel)] px-3 py-2 text-sm font-bold text-[var(--app-accent)] transition hover:bg-[var(--app-panel-muted)]"
                 >
                   <ExternalLink className="h-4 w-4" />
                   Open at {item.start_time || formatTime(startSeconds)}
@@ -48,7 +54,7 @@ export default function OutlineTab({ outline = [], sourceVideoUrl = "" }) {
               )}
             </div>
 
-            <p className="text-sm leading-7 text-slate-700">
+            <p className="ml-0 text-lg leading-8 text-[var(--app-text)] sm:ml-11">
               {item.summary}
             </p>
           </article>
@@ -56,50 +62,4 @@ export default function OutlineTab({ outline = [], sourceVideoUrl = "" }) {
       })}
     </div>
   );
-}
-
-function buildYouTubeJumpUrl(url, startSeconds) {
-  if (!url) {
-    return "";
-  }
-
-  try {
-    const parsedUrl = new URL(url);
-
-    parsedUrl.searchParams.delete("t");
-    parsedUrl.searchParams.delete("start");
-
-    if (parsedUrl.hostname.includes("youtu.be")) {
-      parsedUrl.searchParams.set("t", `${startSeconds}s`);
-      return parsedUrl.toString();
-    }
-
-    if (parsedUrl.hostname.includes("youtube.com")) {
-      parsedUrl.searchParams.set("t", `${startSeconds}s`);
-      return parsedUrl.toString();
-    }
-
-    return "";
-  } catch {
-    return "";
-  }
-}
-
-function formatTime(seconds) {
-  if (
-    seconds === null ||
-    seconds === undefined ||
-    Number.isNaN(Number(seconds))
-  ) {
-    return "00:00:00";
-  }
-
-  const totalSeconds = Math.floor(Number(seconds));
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const secs = totalSeconds % 60;
-
-  return [hours, minutes, secs]
-    .map((value) => String(value).padStart(2, "0"))
-    .join(":");
 }

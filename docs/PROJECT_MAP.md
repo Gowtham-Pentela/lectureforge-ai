@@ -6,19 +6,23 @@ Use it to help AI coding tools understand the codebase before making changes.
 ## Project Summary
 
 - Root: `/Users/gowtham/Desktop/lectureforge-ai`
-- Files scanned: `42`
+- Files scanned: `98`
 - Dependency edges found: `57`
+- Entry points found: `3`
 
-## Generated Visuals
+## Generated Outputs
 
+- Architecture report: `ARCHITECTURE_REPORT.md`
 - Mermaid graph: `PROJECT_DEPENDENCIES.mmd`
 - Graphviz DOT graph: `PROJECT_GRAPH.dot`
+- Interactive graph: `PROJECT_GRAPH.html`
 - Graph image: `PROJECT_GRAPH.png`
 - SVG graph: `PROJECT_GRAPH.svg`
+- Raw graph data: `project_map.json`
 
 ## Suggested AI Instruction
 
-> Read this `PROJECT_MAP.md` first. Then inspect the relevant files before editing code. Preserve working behavior and avoid changing unrelated files.
+> Read `ARCHITECTURE_REPORT.md` and `PROJECT_MAP.md` first. Then inspect the relevant source files before editing code. Preserve working behavior and avoid changing unrelated files.
 
 ## Entry Points
 
@@ -89,17 +93,41 @@ graph TD
     N30["lectureforge-frontend/src/main.jsx"] --> N31["lectureforge-frontend/src/styles/index.css"]
 ```
 
+## Top Hub Files
+
+- `lectureforge-backend/main.py` total=14, incoming=0, outgoing=14 — Application entry point
+- `lectureforge-backend/models/__init__.py` total=8, incoming=8, outgoing=0 — Supporting project file
+- `lectureforge-backend/models/schemas.py` total=8, incoming=8, outgoing=0 — Class-based business logic or data model
+- `lectureforge-frontend/src/components/StudyDashboard.jsx` total=8, incoming=1, outgoing=7 — Frontend component
+- `lectureforge-backend/utils/transcript_utils.py` total=7, incoming=5, outgoing=2 — Utility/helper module
+- `lectureforge-backend/agents/agent2_analysis.py` total=7, incoming=1, outgoing=6 — Streamlit user interface module
+- `lectureforge-backend/agents/agent3_study.py` total=7, incoming=1, outgoing=6 — AI model integration module
+- `lectureforge-frontend/src/App.jsx` total=6, incoming=1, outgoing=5 — Application entry point
+- `lectureforge-backend/utils/__init__.py` total=5, incoming=5, outgoing=0 — Utility/helper module
+- `lectureforge-backend/agents/agent1_ingestion.py` total=5, incoming=1, outgoing=4 — AI model integration module
+
 ## File Summaries
+
+### `MOBILE_RELEASE.md`
+
+- Role: Project documentation
+- Type: `.md`
+- Size: `3763` bytes
+- Lines: `138`
+- Local dependencies: none detected
+- Notes:
+  - May handle API keys, passwords, or secrets. Verify secrets are loaded from environment variables.
+  - Reads, writes, or processes JSON-like data.
 
 ### `README.md`
 
 - Role: Project documentation
 - Type: `.md`
-- Size: `11280` bytes
-- Lines: `560`
+- Size: `18362` bytes
+- Lines: `851`
 - Local dependencies: none detected
 - Notes:
-  - May handle API keys or secrets. Verify secrets are loaded from environment variables.
+  - May handle API keys, passwords, or secrets. Verify secrets are loaded from environment variables.
   - Reads, writes, or processes JSON-like data.
 
 ### `VERSION_NOTES.md`
@@ -137,7 +165,7 @@ graph TD
   - Defines 13 function(s).
   - Defines 1 class(es).
   - Uses environment variable(s): OPENAI_API_KEY, SUPADATA_API_KEY.
-  - May handle API keys or secrets. Verify secrets are loaded from environment variables.
+  - May handle API keys, passwords, or secrets. Verify secrets are loaded from environment variables.
   - Includes exception handling.
 
 ### `lectureforge-backend/agents/agent2_analysis.py`
@@ -163,7 +191,7 @@ graph TD
 
 ### `lectureforge-backend/agents/agent3_study.py`
 
-- Role: Prompt or AI instruction logic
+- Role: AI model integration module
 - Type: `.py`
 - Size: `5841` bytes
 - Lines: `230`
@@ -204,8 +232,8 @@ graph TD
 
 - Role: Application entry point
 - Type: `.py`
-- Size: `34395` bytes
-- Lines: `1169`
+- Size: `37993` bytes
+- Lines: `1279`
 - Local dependencies:
   - `lectureforge-backend/agents/__init__.py`
   - `lectureforge-backend/agents/agent1_ingestion.py`
@@ -221,13 +249,13 @@ graph TD
   - `lectureforge-backend/utils/faculty_audit_validator.py`
   - `lectureforge-backend/utils/study_kit_validator.py`
   - `lectureforge-backend/utils/transcript_utils.py`
-- Functions: build_public_error_message, build_translation_section_key, cosine_similarity, debug_env, debug_openai, extract_json_from_text, get_faculty_audit, get_job_status, get_original_section_data, get_study_kit, get_study_kit_dict, process_faculty_audit plus 15 more
-- Environment variables: OPENAI_API_KEY, OPENAI_EMBEDDING_MODEL, OPENAI_MODEL, SUPADATA_API_KEY
+- Functions: build_public_error_message, build_translation_error_detail, build_translation_section_key, cosine_similarity, debug_env, debug_openai, extract_json_from_text, get_faculty_audit, get_job_status, get_original_section_data, get_study_kit, get_study_kit_dict plus 16 more
+- Environment variables: LECTUREFORGE_CORS_ORIGINS, LECTUREFORGE_ENABLE_DEBUG_ENDPOINTS, OPENAI_API_KEY, OPENAI_EMBEDDING_MODEL, OPENAI_MODEL, SUPADATA_API_KEY
 - Notes:
   - Imports 18 external or internal modules.
-  - Defines 27 function(s).
-  - Uses environment variable(s): OPENAI_API_KEY, OPENAI_EMBEDDING_MODEL, OPENAI_MODEL, SUPADATA_API_KEY.
-  - May handle API keys or secrets. Verify secrets are loaded from environment variables.
+  - Defines 28 function(s).
+  - Uses environment variable(s): LECTUREFORGE_CORS_ORIGINS, LECTUREFORGE_ENABLE_DEBUG_ENDPOINTS, OPENAI_API_KEY, OPENAI_EMBEDDING_MODEL, OPENAI_MODEL, SUPADATA_API_KEY.
+  - May handle API keys, passwords, or secrets. Verify secrets are loaded from environment variables.
   - Includes exception handling.
   - Reads, writes, or processes JSON-like data.
 
@@ -283,7 +311,7 @@ graph TD
 
 ### `lectureforge-backend/services/openai_service.py`
 
-- Role: Prompt or AI instruction logic
+- Role: AI model integration module
 - Type: `.py`
 - Size: `1805` bytes
 - Lines: `64`
@@ -294,7 +322,7 @@ graph TD
   - Imports 5 external or internal modules.
   - Defines 5 function(s).
   - Uses environment variable(s): OPENAI_API_KEY, OPENAI_EMBEDDING_MODEL, OPENAI_MODEL.
-  - May handle API keys or secrets. Verify secrets are loaded from environment variables.
+  - May handle API keys, passwords, or secrets. Verify secrets are loaded from environment variables.
   - Reads, writes, or processes JSON-like data.
 
 ### `lectureforge-backend/study_kit_82186720.json`
@@ -367,20 +395,464 @@ graph TD
 - Lines: `42`
 - Local dependencies: none detected
 
-### `lectureforge-frontend/index.html`
+### `lectureforge-frontend/android/app/build.gradle`
+
+- Role: Dependency or project configuration file
+- Type: `.gradle`
+- Size: `2136` bytes
+- Lines: `54`
+- Local dependencies: none detected
+- Notes:
+  - Reads, writes, or processes JSON-like data.
+
+### `lectureforge-frontend/android/app/capacitor.build.gradle`
 
 - Role: Supporting project file
+- Type: `.gradle`
+- Size: `370` bytes
+- Lines: `19`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/android/app/proguard-rules.pro`
+
+- Role: Supporting project file
+- Type: `.pro`
+- Size: `751` bytes
+- Lines: `21`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/android/app/src/androidTest/java/com/getcapacitor/myapp/ExampleInstrumentedTest.java`
+
+- Role: Test file
+- Type: `.java`
+- Size: `774` bytes
+- Lines: `26`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/android/app/src/main/AndroidManifest.xml`
+
+- Role: Supporting project file
+- Type: `.xml`
+- Size: `1537` bytes
+- Lines: `41`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/android/app/src/main/assets/capacitor.config.json`
+
+- Role: Configuration file
+- Type: `.json`
+- Size: `174` bytes
+- Lines: `11`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/android/app/src/main/assets/capacitor.plugins.json`
+
+- Role: Supporting project file
+- Type: `.json`
+- Size: `3` bytes
+- Lines: `1`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/android/app/src/main/assets/public/assets/index-B_kExwk-.css`
+
+- Role: Stylesheet
+- Type: `.css`
+- Size: `24088` bytes
+- Lines: `1`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/android/app/src/main/assets/public/cordova.js`
+
+- Role: Supporting project file
+- Type: `.js`
+- Size: `0` bytes
+- Lines: `0`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/android/app/src/main/assets/public/cordova_plugins.js`
+
+- Role: Supporting project file
+- Type: `.js`
+- Size: `0` bytes
+- Lines: `0`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/android/app/src/main/assets/public/index.html`
+
+- Role: Frontend HTML entry file
+- Type: `.html`
+- Size: `400` bytes
+- Lines: `13`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/android/app/src/main/java/com/lectureforge/ai/MainActivity.java`
+
+- Role: Supporting project file
+- Type: `.java`
+- Size: `123` bytes
+- Lines: `5`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/android/app/src/main/res/drawable-v24/ic_launcher_foreground.xml`
+
+- Role: Supporting project file
+- Type: `.xml`
+- Size: `1880` bytes
+- Lines: `34`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/android/app/src/main/res/drawable/ic_launcher_background.xml`
+
+- Role: Supporting project file
+- Type: `.xml`
+- Size: `5606` bytes
+- Lines: `170`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/android/app/src/main/res/layout/activity_main.xml`
+
+- Role: Supporting project file
+- Type: `.xml`
+- Size: `535` bytes
+- Lines: `12`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml`
+
+- Role: Supporting project file
+- Type: `.xml`
+- Size: `265` bytes
+- Lines: `5`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml`
+
+- Role: Supporting project file
+- Type: `.xml`
+- Size: `265` bytes
+- Lines: `5`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/android/app/src/main/res/values/ic_launcher_background.xml`
+
+- Role: Supporting project file
+- Type: `.xml`
+- Size: `120` bytes
+- Lines: `4`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/android/app/src/main/res/values/strings.xml`
+
+- Role: Supporting project file
+- Type: `.xml`
+- Size: `308` bytes
+- Lines: `7`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/android/app/src/main/res/values/styles.xml`
+
+- Role: Supporting project file
+- Type: `.xml`
+- Size: `823` bytes
+- Lines: `22`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/android/app/src/main/res/xml/config.xml`
+
+- Role: Configuration file
+- Type: `.xml`
+- Size: `185` bytes
+- Lines: `6`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/android/app/src/main/res/xml/file_paths.xml`
+
+- Role: Supporting project file
+- Type: `.xml`
+- Size: `213` bytes
+- Lines: `5`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/android/app/src/test/java/com/getcapacitor/myapp/ExampleUnitTest.java`
+
+- Role: Test file
+- Type: `.java`
+- Size: `402` bytes
+- Lines: `18`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/android/build.gradle`
+
+- Role: Dependency or project configuration file
+- Type: `.gradle`
+- Size: `637` bytes
+- Lines: `29`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/android/capacitor-cordova-android-plugins/build.gradle`
+
+- Role: Dependency or project configuration file
+- Type: `.gradle`
+- Size: `1668` bytes
+- Lines: `59`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/android/capacitor-cordova-android-plugins/cordova.variables.gradle`
+
+- Role: Supporting project file
+- Type: `.gradle`
+- Size: `312` bytes
+- Lines: `7`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/android/capacitor-cordova-android-plugins/src/main/AndroidManifest.xml`
+
+- Role: Supporting project file
+- Type: `.xml`
+- Size: `210` bytes
+- Lines: `8`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/android/capacitor.settings.gradle`
+
+- Role: Supporting project file
+- Type: `.gradle`
+- Size: `207` bytes
+- Lines: `3`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/android/gradle.properties`
+
+- Role: Supporting project file
+- Type: `.properties`
+- Size: `987` bytes
+- Lines: `22`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/android/gradle/wrapper/gradle-wrapper.properties`
+
+- Role: Supporting project file
+- Type: `.properties`
+- Size: `253` bytes
+- Lines: `7`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/android/gradlew`
+
+- Role: API server or backend route module
+- Type: `no extension`
+- Size: `8733` bytes
+- Lines: `251`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/android/gradlew.bat`
+
+- Role: API server or backend route module
+- Type: `.bat`
+- Size: `2937` bytes
+- Lines: `94`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/android/settings.gradle`
+
+- Role: Supporting project file
+- Type: `.gradle`
+- Size: `208` bytes
+- Lines: `5`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/android/variables.gradle`
+
+- Role: Supporting project file
+- Type: `.gradle`
+- Size: `498` bytes
+- Lines: `16`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/capacitor.config.json`
+
+- Role: Configuration file
+- Type: `.json`
+- Size: `185` bytes
+- Lines: `11`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/index.html`
+
+- Role: Frontend HTML entry file
 - Type: `.html`
 - Size: `302` bytes
 - Lines: `12`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/ios/App/App.xcodeproj/project.pbxproj`
+
+- Role: Streamlit user interface module
+- Type: `.pbxproj`
+- Size: `14489` bytes
+- Lines: `376`
+- Local dependencies: none detected
+- Notes:
+  - Reads, writes, or processes JSON-like data.
+
+### `lectureforge-frontend/ios/App/App.xcodeproj/project.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist`
+
+- Role: Supporting project file
+- Type: `.plist`
+- Size: `238` bytes
+- Lines: `8`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/ios/App/App/AppDelegate.swift`
+
+- Role: Supporting project file
+- Type: `.swift`
+- Size: `3031` bytes
+- Lines: `49`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/ios/App/App/Assets.xcassets/AppIcon.appiconset/Contents.json`
+
+- Role: Supporting project file
+- Type: `.json`
+- Size: `218` bytes
+- Lines: `14`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/ios/App/App/Assets.xcassets/Contents.json`
+
+- Role: Supporting project file
+- Type: `.json`
+- Size: `62` bytes
+- Lines: `6`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/ios/App/App/Assets.xcassets/Splash.imageset/Contents.json`
+
+- Role: Supporting project file
+- Type: `.json`
+- Size: `403` bytes
+- Lines: `23`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/ios/App/App/Base.lproj/LaunchScreen.storyboard`
+
+- Role: Supporting project file
+- Type: `.storyboard`
+- Size: `1994` bytes
+- Lines: `32`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/ios/App/App/Base.lproj/Main.storyboard`
+
+- Role: Supporting project file
+- Type: `.storyboard`
+- Size: `1019` bytes
+- Lines: `19`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/ios/App/App/Info.plist`
+
+- Role: Supporting project file
+- Type: `.plist`
+- Size: `1687` bytes
+- Lines: `51`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/ios/App/App/capacitor.config.json`
+
+- Role: Configuration file
+- Type: `.json`
+- Size: `199` bytes
+- Lines: `12`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/ios/App/App/config.xml`
+
+- Role: Configuration file
+- Type: `.xml`
+- Size: `185` bytes
+- Lines: `6`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/ios/App/App/public/assets/index-B_kExwk-.css`
+
+- Role: Stylesheet
+- Type: `.css`
+- Size: `24088` bytes
+- Lines: `1`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/ios/App/App/public/cordova.js`
+
+- Role: Supporting project file
+- Type: `.js`
+- Size: `0` bytes
+- Lines: `0`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/ios/App/App/public/cordova_plugins.js`
+
+- Role: Supporting project file
+- Type: `.js`
+- Size: `0` bytes
+- Lines: `0`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/ios/App/App/public/index.html`
+
+- Role: Frontend HTML entry file
+- Type: `.html`
+- Size: `400` bytes
+- Lines: `13`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/ios/App/CapApp-SPM/Package.swift`
+
+- Role: Supporting project file
+- Type: `.swift`
+- Size: `698` bytes
+- Lines: `25`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/ios/App/CapApp-SPM/README.md`
+
+- Role: Project documentation
+- Type: `.md`
+- Size: `162` bytes
+- Lines: `5`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/ios/App/CapApp-SPM/Sources/CapApp-SPM/CapApp-SPM.swift`
+
+- Role: Supporting project file
+- Type: `.swift`
+- Size: `33` bytes
+- Lines: `1`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/ios/capacitor-cordova-ios-plugins/CordovaPluginsResources.podspec`
+
+- Role: Supporting project file
+- Type: `.podspec`
+- Size: `379` bytes
+- Lines: `10`
+- Local dependencies: none detected
+
+### `lectureforge-frontend/ios/debug.xcconfig`
+
+- Role: Configuration file
+- Type: `.xcconfig`
+- Size: `23` bytes
+- Lines: `1`
 - Local dependencies: none detected
 
 ### `lectureforge-frontend/package.json`
 
 - Role: Dependency or project configuration file
 - Type: `.json`
-- Size: `561` bytes
-- Lines: `24`
+- Size: `1005` bytes
+- Lines: `34`
 - Local dependencies: none detected
 
 ### `lectureforge-frontend/postcss.config.js`
@@ -565,13 +1037,13 @@ graph TD
 
 - Role: Reusable logic module
 - Type: `.js`
-- Size: `3662` bytes
-- Lines: `162`
+- Size: `4225` bytes
+- Lines: `185`
 - Local dependencies: none detected
-- Functions: getFacultyAudit, getJobStatus, getStudyKit, processFacultyAudit, processVideo, searchStudyKit, translateSection, translateStudyKit
+- Functions: getErrorMessage, getFacultyAudit, getJobStatus, getStudyKit, processFacultyAudit, processFacultyAuditFromStudyKit, processVideo, searchStudyKit, translateSection, translateStudyKit
 - Environment variables: VITE_API_BASE_URL
 - Notes:
-  - Defines 8 function(s).
+  - Defines 10 function(s).
   - Uses environment variable(s): VITE_API_BASE_URL.
   - Reads, writes, or processes JSON-like data.
 
@@ -589,7 +1061,7 @@ graph TD
 
 ### `lectureforge-frontend/src/styles/index.css`
 
-- Role: Supporting project file
+- Role: Stylesheet
 - Type: `.css`
 - Size: `601` bytes
 - Lines: `34`
@@ -617,16 +1089,16 @@ graph TD
 
 - Role: Developer tooling script
 - Type: `.py`
-- Size: `35127` bytes
-- Lines: `1129`
+- Size: `95918` bytes
+- Lines: `2046`
 - Local dependencies: none detected
-- Functions: __init__, build_graphviz_graph, build_lookup_tables, collect_files, detect_entry_points, detect_env_vars, detect_python_package_roots, escape_dot, escape_mermaid_label, generate_key_notes, get_node_id, graph_node_attributes plus 22 more
-- Classes: FileSummary, ProjectMap, ProjectMapper
+- Functions: __init__, analyze_architecture, build_architecture_warnings, build_graphviz_graph, build_interactive_graph_payload, build_lookup_tables, build_suggested_questions, collect_files, detect_entry_points, detect_env_vars, detect_python_package_roots, escape_dot plus 29 more
+- Classes: ArchitectureAnalysis, FileSummary, ProjectMap, ProjectMapper
 - Notes:
-  - Imports 10 external or internal modules.
-  - Defines 34 function(s).
-  - Defines 3 class(es).
-  - May handle API keys or secrets. Verify secrets are loaded from environment variables.
+  - Imports 11 external or internal modules.
+  - Defines 41 function(s).
+  - Defines 4 class(es).
+  - May handle API keys, passwords, or secrets. Verify secrets are loaded from environment variables.
   - Contains TODO or FIXME comments.
   - Includes exception handling.
 

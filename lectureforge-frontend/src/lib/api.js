@@ -153,6 +153,37 @@ export async function searchStudyKit(
   return response.json();
 }
 
+export async function askLiveAgent({
+  jobId,
+  message,
+  activeTab = "outline",
+  targetLanguage = "English",
+  screenShared = false,
+  voiceEnabled = false,
+}) {
+  const response = await fetch(`${API_BASE_URL}/live-agent`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      job_id: jobId,
+      message,
+      active_tab: activeTab,
+      target_language: targetLanguage,
+      screen_shared: screenShared,
+      voice_enabled: voiceEnabled,
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(getErrorMessage(error, "Live agent failed"));
+  }
+
+  return response.json();
+}
+
 export async function translateSection({
   jobId,
   targetLanguage,

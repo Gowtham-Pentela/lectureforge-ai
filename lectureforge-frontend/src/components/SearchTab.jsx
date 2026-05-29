@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Search, Loader2, Clock3, ExternalLink } from "lucide-react";
 import { searchStudyKit } from "../lib/api";
+import { buildYouTubeJumpUrl, formatTime } from "../lib/youtube";
 
 export default function SearchTab({
   jobId,
@@ -45,13 +46,13 @@ export default function SearchTab({
 
   return (
     <div className="space-y-5">
-      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="rounded-md border border-[var(--app-border)] bg-[var(--app-panel)] p-5 shadow-[0_10px_24px_rgba(15,23,42,0.08)]">
         <div className="mb-4">
-          <h3 className="text-lg font-bold text-slate-950">
+          <h3 className="font-serif text-2xl font-semibold text-[var(--app-text)]">
             Search the lecture
           </h3>
 
-          <p className="mt-1 text-sm leading-6 text-slate-600">
+          <p className="mt-2 text-sm leading-6 text-[var(--app-muted)]">
             Ask a question or search for a topic. If a translated language is
             selected, your query is translated to English for semantic search
             and the results are displayed in the selected language.
@@ -67,13 +68,13 @@ export default function SearchTab({
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Example: How do you copy an array?"
-            className="min-h-[44px] flex-1 rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            className="min-h-[44px] flex-1 rounded-md border border-[var(--app-border)] bg-[var(--app-panel)] px-4 py-3 text-sm text-[var(--app-text)] shadow-sm outline-none transition placeholder:text-[var(--app-soft)] focus:border-[var(--app-accent)] focus:ring-2 focus:ring-[var(--app-accent-soft)]"
           />
 
           <button
             type="submit"
             disabled={isSearching || !query.trim() || !jobId}
-            className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+            className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md bg-[var(--app-accent)] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[var(--app-accent-strong)] disabled:cursor-not-allowed disabled:bg-[var(--app-soft)]"
           >
             {isSearching ? (
               <>
@@ -90,14 +91,14 @@ export default function SearchTab({
         </form>
 
         {error && (
-          <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div className="mt-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {error}
           </div>
         )}
       </div>
 
       {hasSearched && !isSearching && results.length === 0 && !error && (
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 text-sm text-slate-600 shadow-sm">
+        <div className="rounded-md border border-[var(--app-border)] bg-[var(--app-panel)] p-5 text-sm text-[var(--app-muted)]">
           No matching transcript chunks found. Try a different keyword or a
           broader question.
         </div>
@@ -113,10 +114,10 @@ export default function SearchTab({
             return (
               <article
                 key={`${result.start}-${index}`}
-                className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
+                className="rounded-md border border-[var(--app-border)] bg-[var(--app-panel)] p-5 shadow-[0_10px_24px_rgba(15,23,42,0.08)]"
               >
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                  <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                  <div className="inline-flex items-center gap-2 rounded bg-[var(--app-accent-soft)] px-2 py-1 font-mono text-xs font-bold text-[var(--app-accent-strong)]">
                     <Clock3 className="h-4 w-4" />
                     {result.start_time || formatTime(startSeconds)} -{" "}
                     {result.end_time || formatTime(endSeconds)}
@@ -124,7 +125,7 @@ export default function SearchTab({
 
                   <div className="flex flex-wrap items-center gap-2">
                     {typeof result.score === "number" && (
-                      <div className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                        <div className="rounded bg-[var(--app-panel-muted)] px-2 py-1 text-xs font-bold text-[var(--app-muted)]">
                         Relevance: {result.score.toFixed(2)}
                       </div>
                     )}
@@ -134,7 +135,7 @@ export default function SearchTab({
                         href={jumpUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
+                        className="inline-flex items-center gap-1 rounded bg-[var(--app-panel-muted)] px-2 py-1 text-xs font-bold text-[var(--app-accent)] transition hover:bg-[var(--app-accent-soft)]"
                       >
                         <ExternalLink className="h-3.5 w-3.5" />
                         Open at{" "}
@@ -144,7 +145,7 @@ export default function SearchTab({
                   </div>
                 </div>
 
-                <p className="text-sm leading-7 text-slate-700">
+                <p className="text-sm leading-7 text-[var(--app-text)]">
                   {result.text}
                 </p>
               </article>
@@ -154,50 +155,4 @@ export default function SearchTab({
       )}
     </div>
   );
-}
-
-function buildYouTubeJumpUrl(url, startSeconds) {
-  if (!url) {
-    return "";
-  }
-
-  try {
-    const parsedUrl = new URL(url);
-
-    parsedUrl.searchParams.delete("t");
-    parsedUrl.searchParams.delete("start");
-
-    if (parsedUrl.hostname.includes("youtu.be")) {
-      parsedUrl.searchParams.set("t", `${startSeconds}s`);
-      return parsedUrl.toString();
-    }
-
-    if (parsedUrl.hostname.includes("youtube.com")) {
-      parsedUrl.searchParams.set("t", `${startSeconds}s`);
-      return parsedUrl.toString();
-    }
-
-    return "";
-  } catch {
-    return "";
-  }
-}
-
-function formatTime(seconds) {
-  if (
-    seconds === null ||
-    seconds === undefined ||
-    Number.isNaN(Number(seconds))
-  ) {
-    return "00:00:00";
-  }
-
-  const totalSeconds = Math.floor(Number(seconds));
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const secs = totalSeconds % 60;
-
-  return [hours, minutes, secs]
-    .map((value) => String(value).padStart(2, "0"))
-    .join(":");
 }

@@ -14,6 +14,8 @@ from models.schemas import (
     SearchRequest,
     SearchResponse,
     SearchResult,
+    LiveAgentRequest,
+    LiveAgentResponse,
     LectureAnalysis,
     TranslateStudyKitRequest,
     TranslateSectionRequest,
@@ -38,10 +40,16 @@ app = FastAPI(
     version="0.2.0",
 )
 
+cors_origins = [
+    origin.strip()
+    for origin in os.getenv("LECTUREFORGE_CORS_ORIGINS", "*").split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=cors_origins,
+    allow_credentials="*" not in cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -67,41 +75,42 @@ def root():
     }
 
 
-@app.get("/debug-env")
-def debug_env():
-    openai_key = os.getenv("OPENAI_API_KEY")
-    supadata_key = os.getenv("SUPADATA_API_KEY")
-
-    return {
-        "openai_key_present": bool(openai_key),
-        "openai_key_prefix": openai_key[:7] if openai_key else None,
-        "openai_key_length": len(openai_key) if openai_key else 0,
-        "openai_model": os.getenv("OPENAI_MODEL"),
-        "embedding_model": os.getenv("OPENAI_EMBEDDING_MODEL"),
-        "supadata_key_present": bool(supadata_key),
-        "supadata_key_prefix": supadata_key[:7] if supadata_key else None,
-        "supadata_key_length": len(supadata_key) if supadata_key else 0,
-    }
-
-
-@app.get("/debug-openai")
-def debug_openai():
-    try:
-        result = generate_text(
-            system_prompt="You are a test assistant.",
-            user_prompt="Reply with exactly: OpenAI connection works",
-        )
+if os.getenv("LECTUREFORGE_ENABLE_DEBUG_ENDPOINTS") == "true":
+    @app.get("/debug-env")
+    def debug_env():
+        openai_key = os.getenv("OPENAI_API_KEY")
+        supadata_key = os.getenv("SUPADATA_API_KEY")
 
         return {
-            "success": True,
-            "response": result,
+            "openai_key_present": bool(openai_key),
+            "openai_key_prefix": openai_key[:7] if openai_key else None,
+            "openai_key_length": len(openai_key) if openai_key else 0,
+            "openai_model": os.getenv("OPENAI_MODEL"),
+            "embedding_model": os.getenv("OPENAI_EMBEDDING_MODEL"),
+            "supadata_key_present": bool(supadata_key),
+            "supadata_key_prefix": supadata_key[:7] if supadata_key else None,
+            "supadata_key_length": len(supadata_key) if supadata_key else 0,
         }
 
-    except Exception as e:
-        return {
-            "success": False,
-            "error": str(e),
-        }
+
+    @app.get("/debug-openai")
+    def debug_openai():
+        try:
+            result = generate_text(
+                system_prompt="You are a test assistant.",
+                user_prompt="Reply with exactly: OpenAI connection works",
+            )
+
+            return {
+                "success": True,
+                "response": result,
+            }
+
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e),
+            }
 
 
 @app.post("/process-video", response_model=ProcessVideoResponse)
@@ -333,6 +342,18 @@ async def run_common_study_pipeline(
 ):
     if not transcript_chunks:
         raise ValueError("No transcript chunks available")
+
+    job_store.update_job(
+        job_id,
+        status="processing",
+        progress=28,
+        message="Normalizing transcript to English",
+    )
+
+    transcript_chunks = await asyncio.to_thread(
+        normalize_transcript_chunks_to_english,
+        transcript_chunks,
+    )
 
     job_store.update_job(
         job_id,
@@ -695,6 +716,235 @@ def semantic_search(request: SearchRequest):
         query=request.query,
         results=scored_results[: request.top_k],
     )
+
+
+@app.post("/live-agent", response_model=LiveAgentResponse)
+def live_agent(request: LiveAgentRequest):
+    job = job_store.get_job(request.job_id)
+
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if job["status"] != "completed":
+        raise HTTPException(
+            status_code=400,
+            detail="Study kit is not ready yet",
+        )
+
+    study_kit = get_study_kit_dict(job["study_kit"])
+    user_message = request.message.strip()
+
+    if not user_message:
+        raise HTTPException(status_code=400, detail="Message is required")
+
+    try:
+        context_cards = build_live_agent_context_cards(study_kit, request)
+        prompt_context = build_live_agent_context(study_kit, request)
+
+        reply = generate_text(
+            system_prompt=f"""
+You are LectureForge Live Agent, a concise real-time learning coach.
+
+Help the learner based on the lecture context, the active workspace tab, and
+whether they are using voice or screen sharing. Give practical, immediate
+feedback. If the student asks for something outside the lecture, answer briefly
+and connect it back to the lecture when useful.
+
+Respond in {request.target_language or "English"}.
+""",
+            user_prompt=f"""
+Current app context:
+{prompt_context}
+
+Learner message:
+{user_message}
+""",
+        )
+
+        return LiveAgentResponse(
+            reply=reply.strip(),
+            context_cards=context_cards,
+        )
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "message": "Live agent failed to respond",
+                "raw_error": str(e),
+            },
+        )
+
+
+def build_live_agent_context_cards(study_kit, request: LiveAgentRequest):
+    cards = [
+        f"Lecture: {study_kit.get('lecture_title', 'Untitled lecture')}",
+        f"Active view: {request.active_tab or 'workspace'}",
+    ]
+
+    if request.voice_enabled:
+        cards.append("Voice input active")
+
+    if request.screen_shared:
+        cards.append("Screen sharing active")
+
+    outline = study_kit.get("outline", [])
+    if outline:
+        first_item = outline[0]
+        cards.append(
+            f"Current anchor: {first_item.get('title', 'Opening section')}"
+        )
+
+    return cards[:4]
+
+
+def build_live_agent_context(study_kit, request: LiveAgentRequest):
+    outline = study_kit.get("outline", [])[:6]
+    key_concepts = study_kit.get("key_concepts", [])[:8]
+    transcript_chunks = study_kit.get("transcript_chunks", [])[:4]
+
+    outline_lines = [
+        f"- {item.get('start_time', '')} {item.get('title', '')}: {item.get('summary', '')}"
+        for item in outline
+    ]
+
+    concept_lines = [
+        f"- {item.get('timestamp_time', '')} {item.get('concept', '')}: {item.get('explanation', '')}"
+        for item in key_concepts
+    ]
+
+    transcript_lines = [
+        f"- {item.get('start_time', '')}: {item.get('text', '')}"
+        for item in transcript_chunks
+    ]
+
+    screen_context = (
+        "The learner is sharing their screen, so reference the visible workspace "
+        "and ask them to point out anything that is not captured in app context."
+        if request.screen_shared
+        else "The learner is not sharing their screen."
+    )
+
+    voice_context = (
+        "The learner is using voice input; keep the response easy to follow aloud."
+        if request.voice_enabled
+        else "The learner is typing."
+    )
+
+    return "\n".join(
+        [
+            f"Lecture title: {study_kit.get('lecture_title', 'Untitled lecture')}",
+            f"Active tab: {request.active_tab or 'workspace'}",
+            f"Target language: {request.target_language or 'English'}",
+            screen_context,
+            voice_context,
+            "Outline:",
+            "\n".join(outline_lines) or "- No outline available",
+            "Key concepts:",
+            "\n".join(concept_lines) or "- No concepts available",
+            "Opening transcript context:",
+            "\n".join(transcript_lines) or "- No transcript available",
+        ]
+    )
+
+
+def normalize_transcript_chunks_to_english(transcript_chunks):
+    if not transcript_chunks or transcript_looks_english(transcript_chunks):
+        return transcript_chunks
+
+    normalized_chunks = []
+    batch_size = 20
+
+    for batch_start in range(0, len(transcript_chunks), batch_size):
+        batch = transcript_chunks[batch_start : batch_start + batch_size]
+        payload = [
+            {
+                "index": batch_start + index,
+                "start": chunk.start,
+                "end": chunk.end,
+                "text": chunk.text,
+            }
+            for index, chunk in enumerate(batch)
+        ]
+
+        system_prompt = """
+You translate lecture transcript chunks into English.
+
+Return valid JSON only.
+
+Schema:
+{
+  "chunks": [
+    {
+      "index": number,
+      "text": "English translation"
+    }
+  ]
+}
+
+Rules:
+- Translate all non-English text into natural English.
+- If a chunk is already English, keep it in English and lightly clean it.
+- Preserve meaning. Do not summarize.
+- Preserve the index values exactly.
+"""
+
+        translated = generate_json(
+            system_prompt=system_prompt,
+            user_prompt=f"Translate these transcript chunks into English:\n{payload}",
+        )
+
+        translated_by_index = {
+            int(item.get("index")): item.get("text", "")
+            for item in translated.get("chunks", [])
+            if item.get("index") is not None
+        }
+
+        for index, chunk in enumerate(batch):
+            original_index = batch_start + index
+            translated_text = translated_by_index.get(original_index)
+
+            if translated_text:
+                chunk.text = translated_text
+
+            normalized_chunks.append(chunk)
+
+    return normalized_chunks
+
+
+def transcript_looks_english(transcript_chunks):
+    sample = " ".join(chunk.text for chunk in transcript_chunks[:6])
+
+    if not sample.strip():
+        return True
+
+    ascii_letters = sum(1 for char in sample if char.isascii() and char.isalpha())
+    non_ascii_letters = sum(1 for char in sample if not char.isascii() and char.isalpha())
+    common_english_words = {
+        "the",
+        "and",
+        "to",
+        "of",
+        "in",
+        "that",
+        "is",
+        "for",
+        "with",
+        "this",
+        "you",
+        "we",
+        "are",
+    }
+    words = [
+        word.strip(".,!?;:()[]{}\"'").lower()
+        for word in sample.split()
+    ]
+    english_hits = sum(1 for word in words if word in common_english_words)
+
+    if non_ascii_letters > ascii_letters * 0.2:
+        return False
+
+    return english_hits >= 3 or non_ascii_letters == 0
 
 
 def translate_existing_study_kit(study_kit, target_language: str):

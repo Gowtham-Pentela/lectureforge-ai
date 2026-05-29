@@ -1,12 +1,13 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import Tabs from "./Tabs";
 import OutlineTab from "./OutlineTab";
 import SummariesTab from "./SummariesTab";
 import FlashcardsTab from "./FlashcardsTab";
 import ConceptMapTab from "./ConceptMapTab";
 import SearchTab from "./SearchTab";
-import TranscriptTab from "./TranscriptTab";
-import { Clock3, Layers3 } from "lucide-react";
+import LiveAgentPanel from "./LiveAgentPanel";
+import { buildYouTubeEmbedUrl, buildYouTubeJumpUrl, formatTime } from "../lib/youtube";
+import { Clock3, Layers3, Languages } from "lucide-react";
 
 const languages = [
   "English",
@@ -28,193 +29,177 @@ export default function StudyDashboard({
   translationProgress = {},
 }) {
   const [activeTab, setActiveTab] = useState("outline");
+  const embedUrl = useMemo(
+    () => buildYouTubeEmbedUrl(sourceVideoUrl),
+    [sourceVideoUrl]
+  );
+  const transcriptPreview = studyKit.transcript_chunks?.slice(0, 8) || [];
 
   return (
-    <main className="mt-8">
-      <section className="mb-5 rounded-[2rem] border border-slate-200 bg-white p-5 shadow-soft md:p-6">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <p className="mb-2 text-sm font-semibold uppercase tracking-wide text-blue-600">
-              Generated study kit
+    <main className="-mx-4 -mb-6 border-t border-[var(--app-border)] sm:-mx-6">
+      <section className="grid min-h-[calc(100vh-4rem)] lg:grid-cols-[50%_50%]">
+        <div className="border-b border-[var(--app-border)] bg-[var(--app-panel)] px-4 py-5 sm:px-6 lg:border-b-0 lg:border-r">
+          <div className="mb-5">
+            <p className="mb-2 text-xs font-bold uppercase tracking-[0.24em] text-[var(--app-soft)]">
+              The lecture
             </p>
 
-            <h2 className="text-2xl font-bold text-slate-950 md:text-3xl">
+            <h1 className="max-w-4xl font-serif text-3xl font-semibold leading-tight text-[var(--app-text)]">
               {studyKit.lecture_title || "Generated Study Kit"}
-            </h2>
+            </h1>
 
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">
-              The lecture is processed once in English. Use the display language
-              selector to translate the generated learning material section by
-              section without reprocessing the video.
-            </p>
-
-            {studyKit.bilingual_output?.target_language && (
-              <p className="mt-2 text-sm font-semibold text-blue-700">
-                Displaying translated study kit in{" "}
-                {studyKit.bilingual_output.target_language}
-              </p>
-            )}
-
-            <div className="mt-4 flex flex-wrap gap-2">
-              <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700">
-                <Clock3 size={16} />
+            <div className="mt-3 flex flex-wrap gap-4 text-sm font-semibold text-[var(--app-muted)]">
+              <span className="inline-flex items-center gap-1.5">
+                <Clock3 className="h-4 w-4" />
                 {studyKit.duration_time || "Unknown duration"}
-              </div>
-
-              <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700">
-                <Layers3 size={16} />
-                {studyKit.transcript_chunks?.length || 0} chunks
-              </div>
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <Layers3 className="h-4 w-4" />
+                {studyKit.outline?.length || 0} chapters
+              </span>
+              <span>{studyKit.key_concepts?.length || 0} concepts</span>
             </div>
           </div>
 
-          <div className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 lg:w-80">
-            <label className="mb-2 block text-sm font-semibold text-slate-700">
-              Display language
-            </label>
-
-            <select
-              value={selectedLanguage}
-              onChange={(event) => onLanguageChange(event.target.value)}
-              disabled={isTranslating}
-              className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100"
-            >
-              {languages.map((language) => (
-                <option key={language} value={language}>
-                  {language}
-                </option>
-              ))}
-            </select>
-
-            <p className="mt-2 text-xs leading-5 text-slate-500">
-              Translation updates the generated study kit, transcript display,
-              and search result display. The original semantic index remains
-              English-based for accuracy.
-            </p>
-
-            {selectedLanguage !== "English" && (
-              <div className="mt-4 space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Translation progress
-                </p>
-
-                <TranslationProgressList progress={translationProgress} />
+          <div className="overflow-hidden rounded-md border border-[var(--app-border)] bg-black shadow-[0_18px_45px_rgba(15,23,42,0.16)]">
+            {embedUrl ? (
+              <iframe
+                title={studyKit.lecture_title || "Lecture video"}
+                src={embedUrl}
+                className="aspect-video w-full"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+              />
+            ) : (
+              <div className="grid aspect-video place-items-center bg-slate-950 px-6 text-center text-sm text-white">
+                Video preview is available after a valid YouTube URL is
+                processed.
               </div>
             )}
           </div>
+
+          <div className="mt-5">
+            <div className="mb-3 flex items-center justify-between gap-4">
+              <p className="text-xs font-bold uppercase tracking-[0.24em] text-[var(--app-soft)]">
+                Transcript
+              </p>
+              <p className="font-mono text-xs text-[var(--app-soft)]">
+                click any line to jump
+              </p>
+            </div>
+
+            <div className="max-h-[38vh] space-y-1 overflow-y-auto pr-1">
+              {transcriptPreview.map((chunk, index) => {
+                const startSeconds = Math.floor(Number(chunk.start || 0));
+                const jumpUrl = buildYouTubeJumpUrl(sourceVideoUrl, startSeconds);
+
+                return (
+                  <a
+                    key={`${chunk.start}-${index}`}
+                    href={jumpUrl || undefined}
+                    target={jumpUrl ? "_blank" : undefined}
+                    rel={jumpUrl ? "noreferrer" : undefined}
+                    className="grid grid-cols-[3.5rem_1fr] gap-4 border-l-2 border-transparent px-2 py-2 text-sm leading-6 text-[var(--app-text)] transition hover:border-[var(--app-accent)] hover:bg-[var(--app-panel-muted)]"
+                  >
+                    <span className="font-mono text-xs font-bold text-[var(--app-accent)]">
+                      {chunk.start_time || formatTime(startSeconds)}
+                    </span>
+                    <span>{chunk.text}</span>
+                  </a>
+                );
+              })}
+            </div>
+          </div>
         </div>
 
-        {isTranslating && (
-          <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700">
-            Translating study kit into {selectedLanguage}...
+        <aside className="bg-[var(--app-panel-muted)]">
+          <div className="flex min-h-16 flex-col gap-3 border-b border-[var(--app-border)] px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <Tabs activeTab={activeTab} setActiveTab={setActiveTab} />
+
+            <div className="flex shrink-0 items-center gap-2 rounded-md border border-[var(--app-border)] bg-[var(--app-panel)] px-3 py-2 text-sm text-[var(--app-muted)]">
+              <Languages className="h-4 w-4" />
+              <select
+                value={selectedLanguage}
+                onChange={(event) => onLanguageChange(event.target.value)}
+                disabled={isTranslating}
+                className="bg-transparent font-semibold outline-none disabled:cursor-not-allowed"
+              >
+                {languages.map((language) => (
+                  <option key={language} value={language}>
+                    {language}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
-        )}
+
+          {isTranslating && (
+            <div className="border-b border-[var(--app-border)] bg-[var(--app-panel)] px-5 py-3 text-sm font-semibold text-[var(--app-accent)]">
+              Translating into {selectedLanguage}...
+              <TranslationProgressInline progress={translationProgress} />
+            </div>
+          )}
+
+          <div className="h-[calc(100vh-8rem)] overflow-y-auto px-5 py-5">
+            {activeTab === "outline" && (
+              <OutlineTab
+                outline={studyKit.outline || []}
+                sourceVideoUrl={sourceVideoUrl}
+              />
+            )}
+
+            {activeTab === "summaries" && (
+              <SummariesTab summaries={studyKit.summaries} />
+            )}
+
+            {activeTab === "flashcards" && (
+              <FlashcardsTab
+                flashcards={studyKit.flashcards || []}
+                sourceVideoUrl={sourceVideoUrl}
+              />
+            )}
+
+            {activeTab === "mind-map" && (
+              <ConceptMapTab
+                conceptMap={studyKit.concept_map}
+                outline={studyKit.outline || []}
+                keyConcepts={studyKit.key_concepts || []}
+                sourceVideoUrl={sourceVideoUrl}
+              />
+            )}
+
+            {activeTab === "search" && (
+              <SearchTab
+                jobId={jobId}
+                selectedLanguage={selectedLanguage}
+                sourceVideoUrl={sourceVideoUrl}
+              />
+            )}
+
+            {activeTab === "live-agent" && (
+              <LiveAgentPanel
+                jobId={jobId}
+                studyKit={studyKit}
+                activeTab={activeTab}
+                selectedLanguage={selectedLanguage}
+              />
+            )}
+          </div>
+        </aside>
       </section>
-
-      <Tabs activeTab={activeTab} setActiveTab={setActiveTab} />
-
-      {activeTab === "outline" && (
-        <OutlineTab
-          outline={studyKit.outline || []}
-          sourceVideoUrl={sourceVideoUrl}
-        />
-      )}
-
-      {activeTab === "summaries" && (
-        <SummariesTab summaries={studyKit.summaries} />
-      )}
-
-      {activeTab === "flashcards" && (
-        <FlashcardsTab
-          flashcards={studyKit.flashcards || []}
-          sourceVideoUrl={sourceVideoUrl}
-        />
-      )}
-
-      {activeTab === "concept-map" && (
-        <ConceptMapTab conceptMap={studyKit.concept_map} />
-      )}
-
-      {activeTab === "search" && (
-        <SearchTab
-          jobId={jobId}
-          selectedLanguage={selectedLanguage}
-          sourceVideoUrl={sourceVideoUrl}
-        />
-      )}
-
-      {activeTab === "transcript" && (
-        <TranscriptTab chunks={studyKit.transcript_chunks || []} />
-      )}
     </main>
   );
 }
 
-function TranslationProgressList({ progress }) {
-  const labels = {
-    lecture_title: "Title",
-    outline: "Outline",
-    summaries: "Summaries",
-    key_concepts: "Key Concepts",
-    flashcards: "Flashcards",
-    concept_map: "Concept Map",
-    transcript_chunks: "Transcript",
-  };
+function TranslationProgressInline({ progress }) {
+  const doneCount = Object.values(progress).filter(
+    (status) => status === "done" || status === "cached"
+  ).length;
+  const totalCount = Object.keys(progress).length || 1;
 
   return (
-    <div className="space-y-1">
-      {Object.entries(labels).map(([key, label]) => {
-        const status = progress[key] || "waiting";
-
-        return (
-          <div
-            key={key}
-            className="flex items-center justify-between rounded-xl bg-white px-3 py-2 text-xs"
-          >
-            <span className="font-medium text-slate-700">{label}</span>
-
-            <span className={getTranslationStatusClass(status)}>
-              {formatTranslationStatus(status)}
-            </span>
-          </div>
-        );
-      })}
-    </div>
+    <span className="ml-2 font-mono text-xs text-[var(--app-muted)]">
+      {doneCount}/{totalCount} sections ready
+    </span>
   );
-}
-
-function formatTranslationStatus(status) {
-  if (!status || status === "waiting") {
-    return "Waiting";
-  }
-
-  if (status === "translating") {
-    return "Translating";
-  }
-
-  if (status === "done") {
-    return "Done";
-  }
-
-  if (status === "cached") {
-    return "Cached";
-  }
-
-  return status;
-}
-
-function getTranslationStatusClass(status) {
-  if (status === "done" || status === "cached") {
-    return "font-semibold text-emerald-700";
-  }
-
-  if (status === "translating") {
-    return "font-semibold text-blue-700";
-  }
-
-  if (typeof status === "string" && status.includes("/")) {
-    return "font-semibold text-blue-700";
-  }
-
-  return "font-medium text-slate-500";
 }
