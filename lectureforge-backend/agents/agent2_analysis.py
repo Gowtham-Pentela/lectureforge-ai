@@ -72,7 +72,7 @@ Transcript:
             concepts_data = []
 
         return LectureAnalysis(
-            title=data.get("title", "Untitled Lecture"),
+            title=str(data.get("title") or "Untitled Lecture"),
             outline=[
                 OutlineItem(
                     title=str(item.get("title") or "Lecture section"),

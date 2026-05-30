@@ -172,14 +172,14 @@ Transcript:
 
         return {
             "summaries": SummarySet(
-                short_summary=summaries_data.get("short_summary", ""),
-                medium_summary=summaries_data.get("medium_summary", ""),
-                full_summary=summaries_data.get("full_summary", ""),
+                short_summary=self._as_text(summaries_data.get("short_summary")),
+                medium_summary=self._as_text(summaries_data.get("medium_summary")),
+                full_summary=self._as_text(summaries_data.get("full_summary")),
             ),
             "flashcards": [
                 Flashcard(
-                    question=item.get("question", ""),
-                    answer=item.get("answer", ""),
+                    question=self._as_text(item.get("question")),
+                    answer=self._as_text(item.get("answer")),
                     timestamp=self._safe_float(item.get("timestamp"), 0),
                 )
                 for item in flashcards_data
@@ -188,21 +188,21 @@ Transcript:
             "concept_map": ConceptMap(
                 nodes=[
                     ConceptMapNode(
-                        id=item.get("id", ""),
-                        label=item.get("label", ""),
-                        type=item.get("type", "concept"),
+                        id=self._as_node_id(item.get("id"), f"concept_{index + 1}"),
+                        label=self._as_text(item.get("label"), f"Concept {index + 1}"),
+                        type=self._as_text(item.get("type"), "concept"),
                         timestamp=self._safe_float(item.get("timestamp"), 0)
                         if item.get("timestamp") is not None
                         else None,
                     )
-                    for item in nodes_data
+                    for index, item in enumerate(nodes_data)
                     if isinstance(item, dict)
                 ],
                 edges=[
                     ConceptMapEdge(
-                        source=item.get("source", ""),
-                        target=item.get("target", ""),
-                        label=item.get("label", ""),
+                        source=self._as_text(item.get("source")),
+                        target=self._as_text(item.get("target")),
+                        label=self._as_text(item.get("label")),
                     )
                     for item in edges_data
                     if isinstance(item, dict)
@@ -590,3 +590,18 @@ Create bilingual study support for this lecture:
             return float(value)
         except Exception:
             return fallback
+
+    def _as_text(self, value, fallback: str = "") -> str:
+        if value is None:
+            return fallback
+
+        if isinstance(value, (dict, list)):
+            return fallback
+
+        text = str(value).strip()
+        return text if text else fallback
+
+    def _as_node_id(self, value, fallback: str) -> str:
+        text = self._as_text(value, fallback)
+        text = re.sub(r"[^A-Za-z0-9_-]+", "_", text).strip("_").lower()
+        return text or fallback
