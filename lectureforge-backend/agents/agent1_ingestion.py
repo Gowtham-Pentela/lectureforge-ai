@@ -19,6 +19,9 @@ from utils.transcript_utils import clean_text, merge_small_chunks
 load_dotenv()
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+OPENAI_AUDIO_UPLOAD_LIMIT_BYTES = int(
+    os.getenv("OPENAI_AUDIO_UPLOAD_LIMIT_BYTES", str(24 * 1024 * 1024))
+)
 
 
 class Agent1Ingestion:
@@ -572,6 +575,14 @@ class Agent1Ingestion:
             if not audio_path:
                 raise FileNotFoundError("yt-dlp finished but no audio file was found")
 
+            audio_size = os.path.getsize(audio_path)
+
+            if audio_size > OPENAI_AUDIO_UPLOAD_LIMIT_BYTES:
+                raise ValueError(
+                    "Downloaded audio is too large for OpenAI transcription: "
+                    f"{audio_size} bytes. Limit is {OPENAI_AUDIO_UPLOAD_LIMIT_BYTES} bytes."
+                )
+
             with open(audio_path, "rb") as audio_file:
                 transcript = client.audio.transcriptions.create(
                     model="whisper-1",
@@ -611,7 +622,13 @@ class Agent1Ingestion:
         output_template = os.path.join(temp_dir, "audio.%(ext)s")
 
         ydl_options = {
-            "format": "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio",
+            "format": (
+                "bestaudio[filesize<24000000][ext=m4a]/"
+                "bestaudio[filesize_approx<24000000][ext=m4a]/"
+                "bestaudio[filesize<24000000][ext=webm]/"
+                "bestaudio[filesize_approx<24000000][ext=webm]/"
+                "worstaudio[ext=m4a]/worstaudio[ext=webm]/worstaudio"
+            ),
             "outtmpl": output_template,
             "quiet": True,
             "no_warnings": True,

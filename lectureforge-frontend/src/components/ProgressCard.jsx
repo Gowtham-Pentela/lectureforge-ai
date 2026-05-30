@@ -84,6 +84,22 @@ function getFailureHint(status) {
     return "The hosted backend could not complete audio transcription for this video.";
   }
 
+  if (status.error_code === "OPENAI_AUDIO_TOO_LARGE") {
+    return "No-caption videos over the upload limit need chunked background transcription.";
+  }
+
+  if (status.error_code === "OPENAI_QUOTA_ERROR") {
+    return "Check OpenAI billing and quota on the backend API key.";
+  }
+
+  if (status.error_code === "OPENAI_AUTH_ERROR") {
+    return "Check the backend OPENAI_API_KEY configured in Render.";
+  }
+
+  if (status.error_code === "OPENAI_RATE_LIMIT") {
+    return "Retry shortly, or reduce concurrent video processing requests.";
+  }
+
   if (status.can_continue_with_transcript) {
     return "This video may be blocked for automated access. Try another public captioned lecture URL.";
   }

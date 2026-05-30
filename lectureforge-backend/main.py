@@ -1732,6 +1732,64 @@ def build_public_error_message(raw_error: str):
             "raw_error": raw_error,
         }
 
+    if (
+        "downloaded audio is too large" in lower_error
+        or "maximum content length" in lower_error
+        or "request entity too large" in lower_error
+        or "413" in lower_error
+    ):
+        return {
+            "error_code": "OPENAI_AUDIO_TOO_LARGE",
+            "message": (
+                "This video's audio is too large for the current OpenAI "
+                "transcription request. Use a shorter video, a captioned video, "
+                "or process the audio in chunks with a background worker."
+            ),
+            "can_continue_with_transcript": False,
+            "raw_error": raw_error,
+        }
+
+    if "openai whisper" in lower_error and (
+        "insufficient_quota" in lower_error
+        or "exceeded your current quota" in lower_error
+    ):
+        return {
+            "error_code": "OPENAI_QUOTA_ERROR",
+            "message": (
+                "OpenAI rejected audio transcription because quota or billing is not available."
+            ),
+            "can_continue_with_transcript": False,
+            "raw_error": raw_error,
+        }
+
+    if "openai whisper" in lower_error and (
+        "rate_limit" in lower_error
+        or "429" in lower_error
+        or "too many requests" in lower_error
+    ):
+        return {
+            "error_code": "OPENAI_RATE_LIMIT",
+            "message": (
+                "OpenAI rate-limited audio transcription. Please retry after a short delay."
+            ),
+            "can_continue_with_transcript": False,
+            "raw_error": raw_error,
+        }
+
+    if "openai whisper" in lower_error and (
+        "incorrect api key" in lower_error
+        or "invalid api key" in lower_error
+        or "401" in lower_error
+    ):
+        return {
+            "error_code": "OPENAI_AUTH_ERROR",
+            "message": (
+                "OpenAI rejected the backend API key. Check the Render OPENAI_API_KEY value."
+            ),
+            "can_continue_with_transcript": False,
+            "raw_error": raw_error,
+        }
+
     if "openai whisper" in lower_error and "transcription failed" in lower_error:
         return {
             "error_code": "OPENAI_TRANSCRIPTION_ERROR",
