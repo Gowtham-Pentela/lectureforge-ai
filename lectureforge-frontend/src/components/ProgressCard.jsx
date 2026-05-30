@@ -1,19 +1,15 @@
 import React from "react";
 import { AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
 
-export default function ProgressCard({ status, mode = "student" }) {
+export default function ProgressCard({ status }) {
   if (!status) return null;
 
   const isFailed = status.status === "failed";
   const isCompleted = status.status === "completed";
   const title = isCompleted
-    ? mode === "faculty"
-      ? "Faculty review ready"
-      : "Study kit ready"
+    ? "Study kit ready"
     : isFailed
     ? "Processing failed"
-    : mode === "faculty"
-    ? "Reviewing your lecture"
     : "Processing your lecture";
 
   return (

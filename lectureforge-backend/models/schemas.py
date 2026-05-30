@@ -149,6 +149,10 @@ class FacultyAuditRequest(BaseModel):
     youtube_url: str
 
 
+class FacultyAuditFromStudyKitRequest(BaseModel):
+    job_id: str
+
+
 class HighestImpactFix(BaseModel):
     timestamp: str
     issue: str

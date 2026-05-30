@@ -23,6 +23,22 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 class Agent1Ingestion:
     def get_transcript(self, youtube_url: str) -> List[TranscriptChunk]:
         errors = []
+        tried_openai_first = False
+
+        if self._should_try_openai_transcription_first():
+            tried_openai_first = True
+            try:
+                chunks = self._transcribe_with_whisper(youtube_url)
+                if chunks and len(chunks) > 0:
+                    print(
+                        f"OpenAI Whisper transcription succeeded with {len(chunks)} chunks"
+                    )
+                    return merge_small_chunks(chunks)
+
+                errors.append("OpenAI Whisper returned no chunks")
+            except Exception as e:
+                errors.append(f"OpenAI Whisper primary transcription failed: {str(e)}")
+                print(f"OpenAI Whisper primary transcription failed: {str(e)}")
 
         try:
             chunks = self._get_supadata_transcript(youtube_url)
@@ -61,21 +77,57 @@ class Agent1Ingestion:
             errors.append(f"yt-dlp captions failed: {str(e)}")
             print(f"yt-dlp captions failed: {str(e)}")
 
-        try:
-            chunks = self._transcribe_with_whisper(youtube_url)
-            if chunks and len(chunks) > 0:
-                print(f"Whisper transcription succeeded with {len(chunks)} chunks")
-                return merge_small_chunks(chunks)
+        if not tried_openai_first:
+            try:
+                chunks = self._transcribe_with_whisper(youtube_url)
+                if chunks and len(chunks) > 0:
+                    print(f"Whisper transcription succeeded with {len(chunks)} chunks")
+                    return merge_small_chunks(chunks)
 
-            errors.append("Whisper returned no chunks")
-        except Exception as e:
-            errors.append(f"Whisper fallback failed: {str(e)}")
-            print(f"Whisper fallback failed: {str(e)}")
+                errors.append("Whisper returned no chunks")
+            except Exception as e:
+                errors.append(f"Whisper fallback failed: {str(e)}")
+                print(f"Whisper fallback failed: {str(e)}")
 
         raise RuntimeError(
             "Could not extract transcript from this YouTube URL. "
             "Errors: "
             + " | ".join(errors)
+        )
+
+    def _should_try_openai_transcription_first(self) -> bool:
+        provider = os.getenv("LECTUREFORGE_TRANSCRIPT_PROVIDER", "").strip().lower()
+
+        if provider in {"openai", "whisper"}:
+            return True
+
+        if provider in {"supadata", "captions", "youtube"}:
+            return False
+
+        if not os.getenv("OPENAI_API_KEY"):
+            return False
+
+        production_markers = [
+            "RENDER",
+            "VERCEL",
+            "AWS_LAMBDA_FUNCTION_NAME",
+            "AWS_EXECUTION_ENV",
+            "FUNCTION_TARGET",
+            "FUNCTIONS_WORKER_RUNTIME",
+            "K_SERVICE",
+        ]
+        environment_values = [
+            os.getenv("LECTUREFORGE_ENV"),
+            os.getenv("APP_ENV"),
+            os.getenv("ENV"),
+            os.getenv("ENVIRONMENT"),
+            os.getenv("NODE_ENV"),
+        ]
+
+        return any(os.getenv(marker) for marker in production_markers) or any(
+            str(value).lower() == "production"
+            for value in environment_values
+            if value
         )
 
     def _get_supadata_transcript(self, youtube_url: str) -> List[TranscriptChunk]:

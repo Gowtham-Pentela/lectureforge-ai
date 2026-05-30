@@ -34,9 +34,6 @@ export default function Header({ onNewLecture, onThemeToggle, theme }) {
           <a href="#input" className="transition hover:text-[var(--app-accent)]">
             Mind Maps
           </a>
-          <a href="#input" className="transition hover:text-[var(--app-accent)]">
-            Faculty
-          </a>
         </nav>
 
         <div className="flex items-center gap-3 text-[var(--app-muted)]">

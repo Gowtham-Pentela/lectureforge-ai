@@ -2,32 +2,24 @@ import React, { useState } from "react";
 import {
   BrainCircuit,
   FileText,
-  GraduationCap,
   Link2,
-  ShieldCheck,
-  Sparkles,
   Youtube,
 } from "lucide-react";
 import Header from "./components/Header";
 import VideoForm from "./components/VideoForm";
 import ProgressCard from "./components/ProgressCard";
 import StudyDashboard from "./components/StudyDashboard";
-import FacultyAuditDashboard from "./components/FacultyAuditDashboard";
 import {
   processVideo,
-  processFacultyAudit,
   getJobStatus,
   getStudyKit,
-  getFacultyAudit,
   translateSection,
 } from "./lib/api";
 
 export default function App() {
-  const [mode, setMode] = useState("student");
   const [jobId, setJobId] = useState(null);
   const [studyKit, setStudyKit] = useState(null);
   const [englishStudyKit, setEnglishStudyKit] = useState(null);
-  const [facultyAudit, setFacultyAudit] = useState(null);
   const [selectedLanguage, setSelectedLanguage] = useState("English");
   const [sourceVideoUrl, setSourceVideoUrl] = useState("");
 
@@ -46,7 +38,6 @@ export default function App() {
     setJobId(null);
     setStudyKit(null);
     setEnglishStudyKit(null);
-    setFacultyAudit(null);
     setSelectedLanguage("English");
     setSourceVideoUrl("");
     setJobStatus(null);
@@ -61,7 +52,6 @@ export default function App() {
       setError("");
       setStudyKit(null);
       setEnglishStudyKit(null);
-      setFacultyAudit(null);
       setSelectedLanguage("English");
       setTranslationProgress({});
       setJobId(null);
@@ -69,20 +59,16 @@ export default function App() {
       const initialStatus = {
         status: "queued",
         progress: 0,
-        message:
-          mode === "faculty"
-            ? "Starting faculty audit"
-            : "Starting video processing",
+        message: "Starting video processing",
         error: null,
         can_continue_with_transcript: false,
+        ready_sections: [],
+        search_index_status: "pending",
       };
 
       setJobStatus(initialStatus);
 
-      const response =
-        mode === "faculty"
-          ? await processFacultyAudit(youtubeUrl)
-          : await processVideo(youtubeUrl);
+      const response = await processVideo(youtubeUrl);
 
       const newJobId = response.job_id;
 
@@ -91,23 +77,23 @@ export default function App() {
       setJobStatus({
         status: response.status || "queued",
         progress: 0,
-        message:
-          response.message ||
-          (mode === "faculty"
-            ? "Faculty audit started"
-            : "Video processing started"),
+        message: response.message || "Video processing started",
         error: null,
         can_continue_with_transcript: false,
+        ready_sections: [],
+        search_index_status: "pending",
       });
 
-      pollJobStatus(newJobId, mode);
+      pollJobStatus(newJobId);
     } catch (err) {
       const failedStatus = {
         status: "failed",
         progress: 100,
-        message: mode === "faculty" ? "Faculty audit failed" : "Processing failed",
+        message: "Processing failed",
         error: err.message || "Failed to process video",
         can_continue_with_transcript: false,
+        ready_sections: [],
+        search_index_status: "pending",
       };
 
       setJobStatus(failedStatus);
@@ -115,7 +101,7 @@ export default function App() {
     }
   }
 
-  async function pollJobStatus(newJobId, requestedMode) {
+  async function pollJobStatus(newJobId) {
     let attempts = 0;
     const maxAttempts = 180;
 
@@ -133,46 +119,41 @@ export default function App() {
           error_code: job.error_code || null,
           can_continue_with_transcript:
             job.can_continue_with_transcript || false,
+          ready_sections: job.ready_sections || [],
+          study_kit_available: job.study_kit_available || false,
+          search_index_status: job.search_index_status || "pending",
         });
+
+        if (job.study_kit_available && job.status !== "failed") {
+          const partialKit = await getStudyKit(newJobId);
+
+          setEnglishStudyKit(partialKit);
+          setStudyKit((previousKit) =>
+            selectedLanguage === "English" ? partialKit : previousKit
+          );
+        }
 
         if (job.status === "completed") {
           clearInterval(intervalId);
 
           setJobId(newJobId);
 
-          if (requestedMode === "faculty") {
-            const audit = await getFacultyAudit(newJobId);
+          const kit = await getStudyKit(newJobId);
 
-            setFacultyAudit(audit);
-            setStudyKit(null);
-            setEnglishStudyKit(null);
-            setSelectedLanguage("English");
-            setTranslationProgress({});
+          setEnglishStudyKit(kit);
+          setStudyKit(kit);
+          setSelectedLanguage("English");
+          setTranslationProgress({});
 
-            setJobStatus({
-              status: "completed",
-              progress: 100,
-              message: "Faculty audit ready",
-              error: null,
-              can_continue_with_transcript: false,
-            });
-          } else {
-            const kit = await getStudyKit(newJobId);
-
-            setEnglishStudyKit(kit);
-            setStudyKit(kit);
-            setFacultyAudit(null);
-            setSelectedLanguage("English");
-            setTranslationProgress({});
-
-            setJobStatus({
-              status: "completed",
-              progress: 100,
-              message: "Study kit ready",
-              error: null,
-              can_continue_with_transcript: false,
-            });
-          }
+          setJobStatus({
+            status: "completed",
+            progress: 100,
+            message: "Study kit ready",
+            error: null,
+            can_continue_with_transcript: false,
+            ready_sections: job.ready_sections || [],
+            search_index_status: job.search_index_status || "queued",
+          });
         }
 
         if (job.status === "failed") {
@@ -184,9 +165,7 @@ export default function App() {
           clearInterval(intervalId);
 
           const timeoutMessage =
-            requestedMode === "faculty"
-              ? "Faculty audit took too long. Please try a shorter lecture."
-              : "Processing took too long. Please try a shorter lecture.";
+            "Processing took too long. Please try a shorter lecture.";
 
           setJobStatus({
             status: "failed",
@@ -194,6 +173,8 @@ export default function App() {
             message: "Processing timed out",
             error: timeoutMessage,
             can_continue_with_transcript: false,
+            ready_sections: [],
+            search_index_status: "pending",
           });
 
           setError(timeoutMessage);
@@ -209,29 +190,13 @@ export default function App() {
           message: "Processing failed",
           error: message,
           can_continue_with_transcript: false,
+          ready_sections: [],
+          search_index_status: "pending",
         });
 
         setError(message);
       }
     }, 2500);
-  }
-
-  function handleModeChange(nextMode) {
-    if (isProcessing || isTranslating) {
-      return;
-    }
-
-    setMode(nextMode);
-    setJobId(null);
-    setStudyKit(null);
-    setEnglishStudyKit(null);
-    setFacultyAudit(null);
-    setSelectedLanguage("English");
-    setSourceVideoUrl("");
-    setJobStatus(null);
-    setError("");
-    setTranslationProgress({});
-    setLectureFormKey((previous) => previous + 1);
   }
 
   async function handleLanguageChange(language) {
@@ -405,7 +370,7 @@ export default function App() {
       />
 
       <main className="px-4 pb-6 sm:px-6">
-        {!studyKit && !facultyAudit && !jobStatus && (
+        {!studyKit && !jobStatus && (
           <section className="relative mx-auto mb-8 min-h-[calc(100vh-8rem)] max-w-7xl overflow-hidden py-12 text-center sm:py-20">
             <FloatingHeroDecor />
 
@@ -419,24 +384,9 @@ export default function App() {
               </h1>
 
               <p className="mt-8 max-w-3xl text-2xl font-semibold leading-9 text-[var(--app-muted)]">
-                Instantly create mind map summaries, study kits, and faculty
-                reviews from any YouTube lecture.
+                Instantly create mind map summaries and study kits from any
+                YouTube lecture.
               </p>
-
-              <div className="mt-8 inline-flex rounded-2xl border border-[var(--app-border)] bg-white/75 p-1 shadow-sm">
-                <ModePill
-                  active={mode === "student"}
-                  label="Study kit"
-                  onClick={() => handleModeChange("student")}
-                  disabled={isProcessing || isTranslating}
-                />
-                <ModePill
-                  active={mode === "faculty"}
-                  label="Faculty review"
-                  onClick={() => handleModeChange("faculty")}
-                  disabled={isProcessing || isTranslating}
-                />
-              </div>
 
               <div
                 id="input"
@@ -446,7 +396,6 @@ export default function App() {
                   key={lectureFormKey}
                   onSubmit={handleProcessVideo}
                   disabled={isProcessing || isTranslating}
-                  mode={mode}
                 />
               </div>
 
@@ -458,9 +407,10 @@ export default function App() {
         {jobStatus &&
           (jobStatus.status === "queued" ||
             jobStatus.status === "processing" ||
-            jobStatus.status === "failed") && (
+            jobStatus.status === "failed") &&
+          !studyKit && (
             <div className="-mx-4 sm:-mx-6">
-              <ProgressCard status={jobStatus} mode={mode} />
+              <ProgressCard status={jobStatus} />
             </div>
           )}
 
@@ -470,7 +420,7 @@ export default function App() {
           </div>
         )}
 
-        {mode === "student" && studyKit && (
+        {studyKit && (
           <StudyDashboard
             studyKit={studyKit}
             jobId={jobId}
@@ -479,13 +429,7 @@ export default function App() {
             onLanguageChange={handleLanguageChange}
             isTranslating={isTranslating}
             translationProgress={translationProgress}
-          />
-        )}
-
-        {mode === "faculty" && facultyAudit && (
-          <FacultyAuditDashboard
-            audit={facultyAudit}
-            sourceVideoUrl={sourceVideoUrl}
+            generationStatus={jobStatus}
           />
         )}
       </main>
@@ -575,23 +519,6 @@ function normalizeTranslatedSectionData(section, data) {
   }
 
   return data;
-}
-
-function ModePill({ active, label, onClick, disabled }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={`rounded-xl px-5 py-2.5 text-base font-bold transition disabled:cursor-not-allowed disabled:opacity-60 ${
-        active
-          ? "bg-[var(--app-accent)] text-white shadow-sm"
-          : "text-[var(--app-muted)] hover:text-[var(--app-text)]"
-      }`}
-    >
-      {label}
-    </button>
-  );
 }
 
 function FloatingHeroDecor() {

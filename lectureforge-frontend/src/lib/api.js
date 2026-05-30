@@ -30,47 +30,6 @@ export async function processVideo(youtubeUrl) {
   return response.json();
 }
 
-export async function processFacultyAudit(youtubeUrl) {
-  const response = await fetch(`${API_BASE_URL}/process-faculty-audit`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      youtube_url: youtubeUrl,
-    }),
-  });
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(getErrorMessage(error, "Failed to process faculty audit"));
-  }
-
-  return response.json();
-}
-
-export async function processFacultyAuditFromStudyKit(jobId) {
-  const response = await fetch(
-    `${API_BASE_URL}/process-faculty-audit-from-study-kit`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        job_id: jobId,
-      }),
-    }
-  );
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(getErrorMessage(error, "Failed to process faculty audit"));
-  }
-
-  return response.json();
-}
-
 export async function getJobStatus(jobId) {
   const response = await fetch(`${API_BASE_URL}/job-status/${jobId}`);
 
@@ -88,17 +47,6 @@ export async function getStudyKit(jobId) {
   if (!response.ok) {
     const error = await response.json();
     throw new Error(getErrorMessage(error, "Failed to get study kit"));
-  }
-
-  return response.json();
-}
-
-export async function getFacultyAudit(jobId) {
-  const response = await fetch(`${API_BASE_URL}/faculty-audit/${jobId}`);
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(getErrorMessage(error, "Failed to get faculty audit"));
   }
 
   return response.json();

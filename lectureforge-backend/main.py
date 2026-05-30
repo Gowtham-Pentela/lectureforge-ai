@@ -17,10 +17,15 @@ from models.schemas import (
     LiveAgentRequest,
     LiveAgentResponse,
     LectureAnalysis,
+    StudyKit,
+    SummarySet,
+    ConceptMap,
     TranslateStudyKitRequest,
     TranslateSectionRequest,
     FacultyAuditRequest,
+    FacultyAuditFromStudyKitRequest,
     FacultyAuditReport,
+    TranscriptChunk,
 )
 
 from services.job_store import JobStore
@@ -29,7 +34,11 @@ from agents.agent1_ingestion import Agent1Ingestion
 from agents.agent2_analysis import Agent2Analysis
 from agents.agent3_study import Agent3Study
 from agents.agent4_faculty_audit import generate_faculty_audit
-from utils.transcript_utils import plain_text_to_chunks, format_timestamp
+from utils.transcript_utils import (
+    plain_text_to_chunks,
+    format_timestamp,
+    transcript_to_plain_text,
+)
 from utils.study_kit_validator import validate_study_kit
 from utils.faculty_audit_validator import validate_faculty_audit
 
@@ -173,6 +182,35 @@ async def process_faculty_audit(request: FacultyAuditRequest):
     )
 
 
+@app.post("/process-faculty-audit-from-study-kit", response_model=ProcessVideoResponse)
+async def process_faculty_audit_from_study_kit(
+    request: FacultyAuditFromStudyKitRequest,
+):
+    source_job = job_store.get_job(request.job_id)
+
+    if not source_job:
+        raise HTTPException(status_code=404, detail="Study kit job not found")
+
+    if source_job.get("status") != "completed" or not source_job.get("study_kit"):
+        raise HTTPException(status_code=400, detail="Study kit is not ready yet")
+
+    job_id = str(uuid.uuid4())
+    job_store.create_job(job_id)
+
+    asyncio.create_task(
+        run_faculty_audit_from_study_kit_pipeline(
+            job_id=job_id,
+            source_job_id=request.job_id,
+        )
+    )
+
+    return ProcessVideoResponse(
+        job_id=job_id,
+        status="queued",
+        message="Faculty audit started from generated study kit",
+    )
+
+
 async def run_video_processing_pipeline(
     job_id: str,
     youtube_url: str,
@@ -305,6 +343,71 @@ async def run_faculty_audit_pipeline(job_id: str, youtube_url: str):
             can_continue_with_transcript=public_error["can_continue_with_transcript"],
         )
 
+
+async def run_faculty_audit_from_study_kit_pipeline(
+    job_id: str,
+    source_job_id: str,
+):
+    try:
+        source_job = job_store.get_job(source_job_id)
+
+        if not source_job or not source_job.get("study_kit"):
+            raise ValueError("Completed study kit was not found")
+
+        study_kit = source_job["study_kit"]
+        lecture_title = get_study_kit_value(study_kit, "lecture_title") or "Untitled Lecture"
+        transcript_chunks = get_study_kit_value(study_kit, "transcript_chunks") or []
+        transcript_chunks = normalize_transcript_chunk_objects(transcript_chunks)
+
+        if not transcript_chunks:
+            raise ValueError("Study kit did not contain transcript chunks")
+
+        job_store.update_job(
+            job_id,
+            status="processing",
+            progress=30,
+            message="Reusing generated study kit transcript for faculty review",
+        )
+
+        faculty_audit = await asyncio.to_thread(
+            generate_faculty_audit,
+            transcript_chunks,
+            lecture_title,
+        )
+
+        faculty_audit = validate_faculty_audit(faculty_audit)
+
+        faculty_audit_payload = (
+            faculty_audit.model_dump()
+            if hasattr(faculty_audit, "model_dump")
+            else faculty_audit.dict()
+            if hasattr(faculty_audit, "dict")
+            else faculty_audit
+        )
+
+        job_store.update_job(
+            job_id,
+            status="completed",
+            progress=100,
+            message="Faculty audit ready",
+            faculty_audit=faculty_audit_payload,
+        )
+
+    except Exception as e:
+        public_error = build_public_error_message(str(e))
+
+        job_store.update_job(
+            job_id,
+            status="failed",
+            progress=100,
+            message="Faculty audit failed",
+            error=public_error["message"],
+            raw_error=public_error.get("raw_error"),
+            error_code=public_error["error_code"],
+            can_continue_with_transcript=public_error["can_continue_with_transcript"],
+        )
+
+
 async def run_transcript_processing_pipeline(
     job_id: str,
     lecture_title: str,
@@ -367,6 +470,31 @@ async def run_common_study_pipeline(
         transcript_chunks,
     )
 
+    partial_study_kit = StudyKit(
+        lecture_title=lecture_title_override or "Lecture transcript",
+        transcript_chunks=transcript_chunks,
+        outline=[],
+        key_concepts=[],
+        summaries=SummarySet(
+            short_summary="",
+            medium_summary="",
+            full_summary="",
+        ),
+        flashcards=[],
+        concept_map=ConceptMap(nodes=[], edges=[]),
+        bilingual_output=None,
+    )
+    partial_study_kit = validate_study_kit(partial_study_kit)
+
+    job_store.update_job(
+        job_id,
+        status="processing",
+        progress=32,
+        message="Transcript ready. Building outline",
+        study_kit=partial_study_kit,
+        ready_sections=["transcript"],
+    )
+
     job_store.update_job(
         job_id,
         status="processing",
@@ -386,42 +514,131 @@ async def run_common_study_pipeline(
             key_concepts=analysis.key_concepts,
         )
 
-    job_store.update_job(
-        job_id,
-        status="processing",
-        progress=60,
-        message="Agent 3 is generating English study kit",
-    )
-
-    study_kit = await asyncio.to_thread(
-        agent3.generate_study_kit,
-        transcript_chunks,
-        analysis,
-        target_language,
-    )
-
-    study_kit = validate_study_kit(study_kit)
+    partial_study_kit.lecture_title = analysis.title
+    partial_study_kit.outline = analysis.outline
+    partial_study_kit.key_concepts = analysis.key_concepts
+    partial_study_kit = validate_study_kit(partial_study_kit)
 
     job_store.update_job(
         job_id,
         status="processing",
-        progress=85,
-        message="Creating semantic search index",
+        progress=50,
+        message="Outline ready. Generating summary",
+        study_kit=partial_study_kit,
+        ready_sections=["transcript", "outline"],
     )
 
-    embeddings = await asyncio.to_thread(
-        agent3.create_search_embeddings,
-        study_kit.transcript_chunks,
+    transcript_text = transcript_to_plain_text(transcript_chunks)
+
+    summaries = await asyncio.to_thread(
+        agent3._generate_summaries,
+        transcript_text,
     )
+
+    partial_study_kit.summaries = summaries
+    partial_study_kit = validate_study_kit(partial_study_kit)
+
+    job_store.update_job(
+        job_id,
+        status="processing",
+        progress=65,
+        message="Summary ready. Building mind map",
+        study_kit=partial_study_kit,
+        ready_sections=["transcript", "outline", "summaries"],
+    )
+
+    concept_map = await asyncio.to_thread(
+        agent3._generate_concept_map,
+        transcript_text,
+    )
+
+    partial_study_kit.concept_map = concept_map
+    partial_study_kit = validate_study_kit(partial_study_kit)
+
+    job_store.update_job(
+        job_id,
+        status="processing",
+        progress=78,
+        message="Mind map ready. Creating flashcards",
+        study_kit=partial_study_kit,
+        ready_sections=["transcript", "outline", "summaries", "concept_map"],
+    )
+
+    flashcards = await asyncio.to_thread(
+        agent3._generate_flashcards,
+        transcript_text,
+    )
+
+    partial_study_kit.flashcards = flashcards
+    partial_study_kit = validate_study_kit(partial_study_kit)
 
     job_store.update_job(
         job_id,
         status="completed",
         progress=100,
         message="Study kit ready",
-        study_kit=study_kit,
-        embeddings=embeddings,
+        study_kit=partial_study_kit,
+        embeddings=[],
+        search_index_status="queued",
+        ready_sections=[
+            "transcript",
+            "outline",
+            "summaries",
+            "concept_map",
+            "flashcards",
+        ],
     )
+
+    asyncio.create_task(build_semantic_search_index(job_id))
+
+
+async def build_semantic_search_index(job_id: str):
+    try:
+        job = job_store.get_job(job_id)
+
+        if not job or not job.get("study_kit"):
+            return
+
+        if job.get("embeddings"):
+            job_store.update_job(job_id, search_index_status="ready")
+            return
+
+        study_kit = job["study_kit"]
+        transcript_chunks = get_study_kit_value(study_kit, "transcript_chunks") or []
+        transcript_chunks = normalize_transcript_chunk_objects(transcript_chunks)
+
+        if not transcript_chunks:
+            job_store.update_job(
+                job_id,
+                search_index_status="failed",
+                search_index_error="No transcript chunks found for search index",
+            )
+            return
+
+        job_store.update_job(
+            job_id,
+            search_index_status="building",
+            search_index_error="",
+        )
+
+        embeddings = await asyncio.to_thread(
+            agent3.create_search_embeddings,
+            transcript_chunks,
+        )
+
+        job_store.update_job(
+            job_id,
+            embeddings=embeddings,
+            search_index_status="ready",
+            search_index_error="",
+        )
+
+    except Exception as e:
+        job_store.update_job(
+            job_id,
+            search_index_status="failed",
+            search_index_error=str(e),
+        )
 
 
 @app.get("/job-status/{job_id}")
@@ -440,6 +657,9 @@ def get_job_status(job_id: str):
         "raw_error": job.get("raw_error"),
         "error_code": job.get("error_code"),
         "can_continue_with_transcript": job.get("can_continue_with_transcript", False),
+        "search_index_status": job.get("search_index_status", "pending"),
+        "ready_sections": job.get("ready_sections", []),
+        "study_kit_available": bool(job.get("study_kit")),
     }
 
 
@@ -464,7 +684,7 @@ def get_study_kit(job_id: str):
             },
         )
 
-    if job["status"] != "completed":
+    if not job.get("study_kit"):
         raise HTTPException(
             status_code=202,
             detail="Study kit is not ready yet",
@@ -680,9 +900,28 @@ def semantic_search(request: SearchRequest):
     embeddings = job.get("embeddings", [])
 
     if not embeddings:
-        raise HTTPException(
-            status_code=400,
-            detail="No search index found",
+        study_kit = job.get("study_kit")
+        transcript_chunks = (
+            get_study_kit_value(study_kit, "transcript_chunks")
+            if study_kit
+            else []
+        )
+        transcript_chunks = normalize_transcript_chunk_objects(transcript_chunks)
+
+        if not transcript_chunks:
+            raise HTTPException(
+                status_code=400,
+                detail="No transcript chunks found for search",
+            )
+
+        embeddings = agent3.create_search_embeddings(
+            transcript_chunks,
+        )
+        job_store.update_job(
+            request.job_id,
+            embeddings=embeddings,
+            search_index_status="ready",
+            search_index_error="",
         )
 
     search_query = request.query
@@ -1177,6 +1416,33 @@ def get_study_kit_dict(study_kit):
         if hasattr(study_kit, "model_dump")
         else dict(study_kit)
     )
+
+
+def get_study_kit_value(study_kit, key: str):
+    if isinstance(study_kit, dict):
+        return study_kit.get(key)
+
+    return getattr(study_kit, key, None)
+
+
+def normalize_transcript_chunk_objects(chunks):
+    normalized_chunks = []
+
+    for chunk in chunks:
+        if isinstance(chunk, TranscriptChunk):
+            normalized_chunks.append(chunk)
+            continue
+
+        if isinstance(chunk, dict):
+            normalized_chunks.append(
+                TranscriptChunk(
+                    start=float(chunk.get("start", 0)),
+                    end=float(chunk.get("end", chunk.get("start", 0) + 2)),
+                    text=chunk.get("text", ""),
+                )
+            )
+
+    return normalized_chunks
 
 
 def get_original_section_data(study_kit, section: str, batch_start: int = 0, batch_size: int = 5):

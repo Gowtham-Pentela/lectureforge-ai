@@ -7,7 +7,7 @@ import ConceptMapTab from "./ConceptMapTab";
 import SearchTab from "./SearchTab";
 import LiveAgentPanel from "./LiveAgentPanel";
 import { buildYouTubeEmbedUrl, buildYouTubeJumpUrl, formatTime } from "../lib/youtube";
-import { Clock3, Layers3, Languages } from "lucide-react";
+import { Clock3, Layers3, Languages, Loader2 } from "lucide-react";
 
 const languages = [
   "English",
@@ -27,6 +27,7 @@ export default function StudyDashboard({
   onLanguageChange,
   isTranslating,
   translationProgress = {},
+  generationStatus = null,
 }) {
   const [activeTab, setActiveTab] = useState("outline");
   const embedUrl = useMemo(
@@ -34,6 +35,21 @@ export default function StudyDashboard({
     [sourceVideoUrl]
   );
   const transcriptPreview = studyKit.transcript_chunks?.slice(0, 8) || [];
+  const readySections = new Set(generationStatus?.ready_sections || []);
+  const isStillGenerating =
+    generationStatus?.status === "queued" || generationStatus?.status === "processing";
+  const sectionReady = {
+    outline: readySections.has("outline") || Boolean(studyKit.outline?.length),
+    summaries:
+      readySections.has("summaries") ||
+      Boolean(studyKit.summaries?.short_summary),
+    "mind-map":
+      readySections.has("concept_map") ||
+      Boolean(studyKit.concept_map?.nodes?.length),
+    flashcards:
+      readySections.has("flashcards") || Boolean(studyKit.flashcards?.length),
+    search: generationStatus?.search_index_status === "ready",
+  };
 
   return (
     <main className="-mx-4 -mb-6 border-t border-[var(--app-border)] sm:-mx-6">
@@ -140,40 +156,71 @@ export default function StudyDashboard({
             </div>
           )}
 
+          {isStillGenerating && (
+            <div className="border-b border-[var(--app-border)] bg-[var(--app-panel)] px-5 py-3 text-sm font-semibold text-[var(--app-accent)]">
+              <span className="inline-flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                {generationStatus?.message || "Generating the next section"}
+              </span>
+              <GenerationProgress readySections={readySections} />
+            </div>
+          )}
+
           <div className="h-[calc(100vh-8rem)] overflow-y-auto px-5 py-5">
             {activeTab === "outline" && (
-              <OutlineTab
-                outline={studyKit.outline || []}
-                sourceVideoUrl={sourceVideoUrl}
-              />
+              sectionReady.outline ? (
+                <OutlineTab
+                  outline={studyKit.outline || []}
+                  sourceVideoUrl={sourceVideoUrl}
+                />
+              ) : (
+                <SectionLoading title="Outline is being generated" />
+              )
             )}
 
             {activeTab === "summaries" && (
-              <SummariesTab summaries={studyKit.summaries} />
+              sectionReady.summaries ? (
+                <SummariesTab summaries={studyKit.summaries} />
+              ) : (
+                <SectionLoading title="Summary is being generated" />
+              )
             )}
 
             {activeTab === "flashcards" && (
-              <FlashcardsTab
-                flashcards={studyKit.flashcards || []}
-                sourceVideoUrl={sourceVideoUrl}
-              />
+              sectionReady.flashcards ? (
+                <FlashcardsTab
+                  flashcards={studyKit.flashcards || []}
+                  sourceVideoUrl={sourceVideoUrl}
+                />
+              ) : (
+                <SectionLoading title="Flashcards are being generated" />
+              )
             )}
 
             {activeTab === "mind-map" && (
-              <ConceptMapTab
-                conceptMap={studyKit.concept_map}
-                outline={studyKit.outline || []}
-                keyConcepts={studyKit.key_concepts || []}
-                sourceVideoUrl={sourceVideoUrl}
-              />
+              sectionReady["mind-map"] ? (
+                <ConceptMapTab
+                  conceptMap={studyKit.concept_map}
+                  outline={studyKit.outline || []}
+                  keyConcepts={studyKit.key_concepts || []}
+                  sourceVideoUrl={sourceVideoUrl}
+                />
+              ) : (
+                <SectionLoading title="Mind map is being generated" />
+              )
             )}
 
             {activeTab === "search" && (
-              <SearchTab
-                jobId={jobId}
-                selectedLanguage={selectedLanguage}
-                sourceVideoUrl={sourceVideoUrl}
-              />
+              generationStatus?.search_index_status === "ready" ||
+              generationStatus?.status === "completed" ? (
+                <SearchTab
+                  jobId={jobId}
+                  selectedLanguage={selectedLanguage}
+                  sourceVideoUrl={sourceVideoUrl}
+                />
+              ) : (
+                <SectionLoading title="Search is being indexed in the background" />
+              )
             )}
 
             {activeTab === "live-agent" && (
@@ -188,6 +235,53 @@ export default function StudyDashboard({
         </aside>
       </section>
     </main>
+  );
+}
+
+function GenerationProgress({ readySections }) {
+  const steps = [
+    ["transcript", "Transcript"],
+    ["outline", "Outline"],
+    ["summaries", "Summary"],
+    ["concept_map", "Mind Map"],
+    ["flashcards", "Flashcards"],
+  ];
+
+  return (
+    <div className="mt-2 flex flex-wrap gap-2">
+      {steps.map(([id, label]) => {
+        const ready = readySections.has(id);
+
+        return (
+          <span
+            key={id}
+            className={`rounded px-2 py-1 text-xs ${
+              ready
+                ? "bg-[var(--app-accent-soft)] text-[var(--app-accent)]"
+                : "bg-[var(--app-panel-muted)] text-[var(--app-muted)]"
+            }`}
+          >
+            {label}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+function SectionLoading({ title }) {
+  return (
+    <div className="grid min-h-[22rem] place-items-center rounded-md border border-[var(--app-border)] bg-[var(--app-panel)] p-8 text-center">
+      <div>
+        <Loader2 className="mx-auto h-8 w-8 animate-spin text-[var(--app-accent)]" />
+        <h3 className="mt-4 font-serif text-2xl font-semibold text-[var(--app-text)]">
+          {title}
+        </h3>
+        <p className="mt-2 text-sm text-[var(--app-muted)]">
+          You can keep reading the transcript while this section is prepared.
+        </p>
+      </div>
+    </div>
   );
 }
 

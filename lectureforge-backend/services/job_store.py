@@ -19,6 +19,9 @@ class JobStore:
             "study_kit": None,
             "faculty_audit": None,
             "embeddings": [],
+            "search_index_status": "pending",
+            "search_index_error": None,
+            "ready_sections": [],
             "translations": {},
             "translation_sections": {},
         }
@@ -36,6 +39,9 @@ class JobStore:
         study_kit: Any = None,
         faculty_audit: Any = None,
         embeddings: Any = None,
+        search_index_status: Optional[str] = None,
+        search_index_error: Optional[str] = None,
+        ready_sections: Any = None,
     ):
         if job_id not in self.jobs:
             return
@@ -71,6 +77,15 @@ class JobStore:
 
         if embeddings is not None:
             job["embeddings"] = embeddings
+
+        if search_index_status is not None:
+            job["search_index_status"] = search_index_status
+
+        if search_index_error is not None:
+            job["search_index_error"] = search_index_error
+
+        if ready_sections is not None:
+            job["ready_sections"] = ready_sections
 
     def get_job(self, job_id: str):
         return self.jobs.get(job_id)

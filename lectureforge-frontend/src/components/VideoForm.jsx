@@ -16,10 +16,8 @@ const quickTryLinks = [
   },
 ];
 
-export default function VideoForm({ onSubmit, disabled, mode = "student" }) {
+export default function VideoForm({ onSubmit, disabled }) {
   const [youtubeUrl, setYoutubeUrl] = useState("");
-
-  const isFacultyMode = mode === "faculty";
 
   function handleSubmit(event) {
     event.preventDefault();
@@ -52,16 +50,15 @@ export default function VideoForm({ onSubmit, disabled, mode = "student" }) {
             disabled={disabled || !youtubeUrl.trim()}
             className="inline-flex min-h-16 items-center justify-center gap-2 rounded-xl bg-[var(--app-accent)] px-7 text-xl font-black text-white shadow-sm transition hover:bg-[var(--app-accent-strong)] disabled:cursor-not-allowed disabled:bg-[var(--app-soft)]"
           >
-            {isFacultyMode ? "Generate Faculty Audit" : "Generate Study Kit"}
+            Generate Study Kit
             <ArrowRight className="h-4 w-4" />
           </button>
         </div>
       </div>
 
       <p className="mx-auto max-w-3xl text-sm leading-6 text-[var(--app-muted)]">
-        {isFacultyMode
-          ? "The lecture will be reviewed privately for clarity, accessibility, equity, pacing, cognitive load, and student engagement."
-          : "The video is processed once in English. You can translate the study kit, explore a real-time mind map, and ask the live agent for help."}
+        The video is processed once in English. You can translate the study kit,
+        explore a real-time mind map, and ask the live agent for help.
       </p>
 
       <div>
