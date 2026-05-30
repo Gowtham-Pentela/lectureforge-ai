@@ -2,6 +2,7 @@ import os
 import re
 import json
 import time
+import random
 import tempfile
 import subprocess
 from typing import List, Optional
@@ -21,6 +22,12 @@ load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 OPENAI_AUDIO_UPLOAD_LIMIT_BYTES = int(
     os.getenv("OPENAI_AUDIO_UPLOAD_LIMIT_BYTES", str(24 * 1024 * 1024))
+)
+OPENAI_TRANSCRIPTION_MAX_RETRIES = int(
+    os.getenv("OPENAI_TRANSCRIPTION_MAX_RETRIES", "3")
+)
+OPENAI_TRANSCRIPTION_RETRY_BASE_SECONDS = float(
+    os.getenv("OPENAI_TRANSCRIPTION_RETRY_BASE_SECONDS", "2")
 )
 
 
@@ -583,13 +590,7 @@ class Agent1Ingestion:
                     f"{audio_size} bytes. Limit is {OPENAI_AUDIO_UPLOAD_LIMIT_BYTES} bytes."
                 )
 
-            with open(audio_path, "rb") as audio_file:
-                transcript = client.audio.transcriptions.create(
-                    model="whisper-1",
-                    file=audio_file,
-                    response_format="verbose_json",
-                    timestamp_granularities=["segment"],
-                )
+            transcript = self._create_openai_transcription_with_retry(audio_path)
 
             segments = getattr(transcript, "segments", None)
 
@@ -617,6 +618,55 @@ class Agent1Ingestion:
                 )
 
             return chunks
+
+    def _create_openai_transcription_with_retry(self, audio_path: str):
+        last_error = None
+
+        for attempt in range(1, OPENAI_TRANSCRIPTION_MAX_RETRIES + 1):
+            try:
+                with open(audio_path, "rb") as audio_file:
+                    return client.audio.transcriptions.create(
+                        model="whisper-1",
+                        file=audio_file,
+                        response_format="verbose_json",
+                        timestamp_granularities=["segment"],
+                    )
+            except Exception as e:
+                last_error = e
+
+                if not self._is_openai_rate_limit_error(e):
+                    raise
+
+                if attempt >= OPENAI_TRANSCRIPTION_MAX_RETRIES:
+                    break
+
+                delay = (
+                    OPENAI_TRANSCRIPTION_RETRY_BASE_SECONDS
+                    * (2 ** (attempt - 1))
+                    + random.uniform(0, 0.75)
+                )
+                print(
+                    "OpenAI audio transcription rate-limited; "
+                    f"retrying attempt {attempt + 1}/{OPENAI_TRANSCRIPTION_MAX_RETRIES} "
+                    f"in {delay:.1f}s"
+                )
+                time.sleep(delay)
+
+        raise last_error
+
+    def _is_openai_rate_limit_error(self, error: Exception) -> bool:
+        error_text = str(error).lower()
+        status_code = getattr(error, "status_code", None)
+        code = getattr(error, "code", None)
+
+        return (
+            status_code == 429
+            or code == "rate_limit_exceeded"
+            or "rate_limit" in error_text
+            or "rate limit" in error_text
+            or "429" in error_text
+            or "too many requests" in error_text
+        )
 
     def _download_audio_for_openai(self, youtube_url: str, temp_dir: str):
         output_template = os.path.join(temp_dir, "audio.%(ext)s")
