@@ -112,6 +112,9 @@ class Agent1Ingestion:
         if allow_audio in {"true", "1", "yes"}:
             return False
 
+        if allow_audio in {"false", "0", "no"}:
+            return True
+
         return self._is_serverless_runtime()
 
     def _is_serverless_runtime(self) -> bool:
