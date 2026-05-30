@@ -1,17 +1,27 @@
-import React from "react";
-import { AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
+import React, { useState } from "react";
+import { AlertTriangle, CheckCircle2, FileText, Loader2 } from "lucide-react";
 
-export default function ProgressCard({ status }) {
+export default function ProgressCard({ status, onSubmitTranscript }) {
+  const [lectureTitle, setLectureTitle] = useState("");
+  const [transcript, setTranscript] = useState("");
+
   if (!status) return null;
 
   const isFailed = status.status === "failed";
   const isCompleted = status.status === "completed";
   const failureHint = getFailureHint(status);
+  const canPasteTranscript =
+    isFailed && status.can_continue_with_transcript && onSubmitTranscript;
   const title = isCompleted
     ? "Study kit ready"
     : isFailed
     ? "Processing failed"
     : "Processing your lecture";
+  const statusMessage = isFailed
+    ? canPasteTranscript
+      ? "The URL path did not complete, but you can continue with a pasted transcript."
+      : "The URL path did not complete. Review the detail below and retry when ready."
+    : status.message || "Processing your video. This can take a moment.";
 
   return (
     <section className="mx-auto grid min-h-[calc(100vh-9rem)] max-w-4xl place-items-center px-4 py-12 text-center">
@@ -39,7 +49,7 @@ export default function ProgressCard({ status }) {
         </h2>
 
         <p className="mx-auto mt-4 max-w-2xl text-lg font-semibold leading-8 text-[var(--app-muted)]">
-          {status.message || "Processing your video. This can take a moment."}
+          {statusMessage}
         </p>
 
         {!isFailed && (
@@ -65,6 +75,52 @@ export default function ProgressCard({ status }) {
               </p>
             )}
           </div>
+        )}
+
+        {canPasteTranscript && (
+          <form
+            className="mx-auto mt-6 max-w-2xl text-left"
+            onSubmit={(event) => {
+              event.preventDefault();
+
+              if (!transcript.trim()) {
+                return;
+              }
+
+              onSubmitTranscript({
+                lectureTitle: lectureTitle.trim(),
+                transcript: transcript.trim(),
+              });
+            }}
+          >
+            <div className="mb-3 flex items-center gap-2 text-sm font-black uppercase tracking-wide text-[var(--app-muted)]">
+              <FileText className="h-4 w-4" />
+              Transcript fallback
+            </div>
+
+            <input
+              type="text"
+              value={lectureTitle}
+              onChange={(event) => setLectureTitle(event.target.value)}
+              placeholder="Lecture title optional"
+              className="mb-3 w-full rounded-xl border border-[var(--app-border)] bg-white px-4 py-3 text-sm font-semibold text-[var(--app-text)] outline-none focus:border-[var(--app-accent)]"
+            />
+
+            <textarea
+              value={transcript}
+              onChange={(event) => setTranscript(event.target.value)}
+              placeholder="Paste the YouTube transcript here to generate the same study kit without re-reading the video URL."
+              className="min-h-36 w-full resize-y rounded-xl border border-[var(--app-border)] bg-white px-4 py-3 text-sm leading-6 text-[var(--app-text)] outline-none focus:border-[var(--app-accent)]"
+            />
+
+            <button
+              type="submit"
+              disabled={!transcript.trim()}
+              className="mt-3 inline-flex min-h-11 items-center justify-center rounded-xl bg-[var(--app-accent)] px-5 text-sm font-black text-white transition hover:bg-[var(--app-accent-strong)] disabled:cursor-not-allowed disabled:bg-[var(--app-soft)]"
+            >
+              Generate from transcript
+            </button>
+          </form>
         )}
       </div>
     </section>
@@ -97,11 +153,11 @@ function getFailureHint(status) {
   }
 
   if (status.error_code === "OPENAI_RATE_LIMIT") {
-    return "Retry shortly, or reduce concurrent video processing requests.";
+    return "The backend will avoid audio transcription when captions or transcript services are available.";
   }
 
   if (status.can_continue_with_transcript) {
-    return "This video may be blocked for automated access. Try another public captioned lecture URL.";
+    return "Paste the lecture transcript below to keep building the study kit.";
   }
 
   return "";

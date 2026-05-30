@@ -11,6 +11,7 @@ import ProgressCard from "./components/ProgressCard";
 import StudyDashboard from "./components/StudyDashboard";
 import {
   processVideo,
+  processTranscript,
   getJobStatus,
   getStudyKit,
   translateSection,
@@ -98,6 +99,61 @@ export default function App() {
 
       setJobStatus(failedStatus);
       setError(err.message || "Failed to process video");
+    }
+  }
+
+  async function handleProcessTranscript({ lectureTitle, transcript }) {
+    try {
+      setSourceVideoUrl("");
+      setError("");
+      setStudyKit(null);
+      setEnglishStudyKit(null);
+      setSelectedLanguage("English");
+      setTranslationProgress({});
+      setJobId(null);
+
+      setJobStatus({
+        status: "queued",
+        progress: 0,
+        message: "Starting transcript processing",
+        error: null,
+        can_continue_with_transcript: false,
+        ready_sections: [],
+        search_index_status: "pending",
+      });
+
+      const response = await processTranscript({
+        lectureTitle,
+        transcript,
+      });
+
+      const newJobId = response.job_id;
+
+      setJobId(newJobId);
+      setJobStatus({
+        status: response.status || "queued",
+        progress: 0,
+        message: response.message || "Transcript processing started",
+        error: null,
+        can_continue_with_transcript: false,
+        ready_sections: [],
+        search_index_status: "pending",
+      });
+
+      pollJobStatus(newJobId);
+    } catch (err) {
+      const failedStatus = {
+        status: "failed",
+        progress: 100,
+        message: "Processing failed",
+        error: err.message || "Failed to process transcript",
+        can_continue_with_transcript: false,
+        ready_sections: [],
+        search_index_status: "pending",
+      };
+
+      setJobStatus(failedStatus);
+      setError(err.message || "Failed to process transcript");
     }
   }
 
@@ -410,7 +466,10 @@ export default function App() {
             jobStatus.status === "failed") &&
           !studyKit && (
             <div className="-mx-4 sm:-mx-6">
-              <ProgressCard status={jobStatus} />
+              <ProgressCard
+                status={jobStatus}
+                onSubmitTranscript={handleProcessTranscript}
+              />
             </div>
           )}
 

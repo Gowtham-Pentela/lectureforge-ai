@@ -1,5 +1,5 @@
 import React from "react";
-import { Globe2, Moon, RotateCw, Sun, Zap } from "lucide-react";
+import { Moon, RotateCw, Sun, Zap } from "lucide-react";
 
 export default function Header({ onNewLecture, onThemeToggle, theme }) {
   const isDark = theme === "dark";
@@ -46,26 +46,6 @@ export default function Header({ onNewLecture, onThemeToggle, theme }) {
             {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </button>
 
-          <button
-            type="button"
-            className="hidden h-11 items-center gap-2 rounded-full px-3 text-sm font-semibold text-[var(--app-text)] transition hover:bg-[var(--app-panel-muted)] sm:inline-flex"
-          >
-            <Globe2 className="h-4 w-4" />
-          </button>
-
-          <button
-            type="button"
-            className="hidden h-11 items-center rounded-xl bg-[var(--app-purple)] px-6 text-base font-bold text-white shadow-sm transition hover:opacity-90 sm:inline-flex"
-          >
-            Sign in
-          </button>
-
-          <button
-            type="button"
-            className="hidden h-11 items-center rounded-xl bg-[var(--app-accent)] px-6 text-base font-bold text-white shadow-sm transition hover:bg-[var(--app-accent-strong)] sm:inline-flex"
-          >
-            Start for free
-          </button>
         </div>
       </div>
     </header>

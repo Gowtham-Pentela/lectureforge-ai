@@ -1728,7 +1728,7 @@ def build_public_error_message(raw_error: str):
                 "timeouts. Use a captioned lecture, paste a transcript, or run the "
                 "backend on a worker service for no-caption videos."
             ),
-            "can_continue_with_transcript": False,
+            "can_continue_with_transcript": True,
             "raw_error": raw_error,
         }
 
@@ -1745,7 +1745,7 @@ def build_public_error_message(raw_error: str):
                 "transcription request. Use a shorter video, a captioned video, "
                 "or process the audio in chunks with a background worker."
             ),
-            "can_continue_with_transcript": False,
+            "can_continue_with_transcript": True,
             "raw_error": raw_error,
         }
 
@@ -1772,7 +1772,7 @@ def build_public_error_message(raw_error: str):
             "message": (
                 "OpenAI rate-limited audio transcription. Please retry after a short delay."
             ),
-            "can_continue_with_transcript": False,
+            "can_continue_with_transcript": True,
             "raw_error": raw_error,
         }
 
@@ -1798,7 +1798,7 @@ def build_public_error_message(raw_error: str):
                 "Use a captioned lecture, paste a transcript, or run audio "
                 "transcription from a longer-lived backend worker."
             ),
-            "can_continue_with_transcript": False,
+            "can_continue_with_transcript": True,
             "raw_error": raw_error,
         }
 

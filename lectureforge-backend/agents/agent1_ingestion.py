@@ -5,7 +5,7 @@ import time
 import random
 import tempfile
 import subprocess
-from typing import List, Optional
+from typing import List, Optional, Iterable, Tuple
 from urllib.parse import urlparse, parse_qs
 
 import requests
@@ -35,69 +35,26 @@ class Agent1Ingestion:
     def get_transcript(self, youtube_url: str) -> List[TranscriptChunk]:
         errors = []
         provider = self._get_transcript_provider()
-        use_supadata = provider == "supadata"
-        use_captions = provider not in {"openai_only", "whisper_only"}
-        use_openai = provider not in {"supadata", "captions", "youtube"}
-        use_ytdlp_captions = provider != "captions_fast"
 
-        if use_supadata:
+        for strategy in self._get_transcript_strategies(provider):
             try:
-                chunks = self._get_supadata_transcript(youtube_url)
+                chunks = self._run_transcript_strategy(strategy, youtube_url)
+
                 if chunks and len(chunks) > 3:
-                    if self._chunks_look_english(chunks):
-                        print(f"Supadata transcript extraction succeeded with {len(chunks)} chunks")
-                        return merge_small_chunks(chunks)
+                    if strategy == "supadata" and not self._chunks_look_english(chunks):
+                        errors.append(
+                            "Supadata returned non-English transcript; trying next fallback"
+                        )
+                        print("Supadata returned non-English transcript; trying next fallback")
+                        continue
 
-                    errors.append("Supadata returned non-English transcript; trying translatable captions")
-                    print("Supadata returned non-English transcript; trying translatable captions")
-
-                errors.append("Supadata returned too few chunks")
-            except Exception as e:
-                errors.append(f"Supadata failed: {str(e)}")
-                print(f"Supadata failed: {str(e)}")
-
-        if use_captions:
-            try:
-                chunks = self._get_transcript_api_captions(youtube_url)
-                if chunks and len(chunks) > 3:
-                    print(f"youtube-transcript-api succeeded with {len(chunks)} chunks")
+                    print(f"{strategy} transcript extraction succeeded with {len(chunks)} chunks")
                     return merge_small_chunks(chunks)
 
-                errors.append("youtube-transcript-api returned too few chunks")
+                errors.append(f"{strategy} returned too few chunks")
             except Exception as e:
-                errors.append(f"youtube-transcript-api failed: {str(e)}")
-                print(f"youtube-transcript-api failed: {str(e)}")
-
-            if use_ytdlp_captions and not self._is_serverless_runtime():
-                try:
-                    chunks = self._get_youtube_captions_with_ytdlp(youtube_url)
-                    if chunks and len(chunks) > 3:
-                        print(f"yt-dlp caption extraction succeeded with {len(chunks)} chunks")
-                        return merge_small_chunks(chunks)
-
-                    errors.append("yt-dlp captions returned too few chunks")
-                except Exception as e:
-                    errors.append(f"yt-dlp captions failed: {str(e)}")
-                    print(f"yt-dlp captions failed: {str(e)}")
-
-        if use_openai:
-            if self._should_skip_hosted_audio_transcription():
-                errors.append(
-                    "Hosted audio transcription is disabled on serverless runtime"
-                )
-            else:
-                try:
-                    chunks = self._transcribe_with_whisper(youtube_url)
-                    if chunks and len(chunks) > 0:
-                        print(
-                            f"OpenAI Whisper transcription succeeded with {len(chunks)} chunks"
-                        )
-                        return merge_small_chunks(chunks)
-
-                    errors.append("OpenAI Whisper returned no chunks")
-                except Exception as e:
-                    errors.append(f"OpenAI Whisper transcription failed: {str(e)}")
-                    print(f"OpenAI Whisper transcription failed: {str(e)}")
+                errors.append(f"{strategy} failed: {str(e)}")
+                print(f"{strategy} failed: {str(e)}")
 
         raise RuntimeError(
             "Could not extract transcript from this YouTube URL. "
@@ -112,6 +69,97 @@ class Agent1Ingestion:
             return provider
 
         return "auto"
+
+    def _get_transcript_strategies(self, provider: str) -> List[str]:
+        configured_strategy = os.getenv("LECTUREFORGE_TRANSCRIPT_STRATEGY", "").strip()
+
+        if configured_strategy:
+            return [
+                self._normalize_transcript_strategy(item)
+                for item in configured_strategy.split(",")
+                if self._normalize_transcript_strategy(item)
+            ]
+
+        provider_map = {
+            "auto": self._default_transcript_strategy(),
+            "captions": ["youtube_captions", "ytdlp_captions"],
+            "captions_fast": ["youtube_captions"],
+            "youtube": ["youtube_captions", "ytdlp_captions"],
+            "supadata": ["supadata", "youtube_captions", "ytdlp_captions"],
+            "openai": ["youtube_captions", "ytdlp_captions", "supadata", "openai_audio"],
+            "whisper": ["youtube_captions", "ytdlp_captions", "supadata", "openai_audio"],
+            "openai_only": ["openai_audio"],
+            "whisper_only": ["openai_audio"],
+        }
+
+        return provider_map.get(provider, self._default_transcript_strategy())
+
+    def _default_transcript_strategy(self) -> List[str]:
+        strategies = ["youtube_captions"]
+
+        if os.getenv("SUPADATA_API_KEY"):
+            prefer_supadata = os.getenv(
+                "LECTUREFORGE_PREFER_SUPADATA",
+                "true" if self._is_hosted_runtime() else "false",
+            ).strip().lower()
+
+            if prefer_supadata in {"true", "1", "yes"}:
+                strategies = ["supadata", "youtube_captions"]
+            else:
+                strategies.append("supadata")
+
+        strategies.extend(["ytdlp_captions", "openai_audio"])
+        return strategies
+
+    def _normalize_transcript_strategy(self, strategy: str) -> str:
+        normalized = strategy.strip().lower().replace("-", "_")
+
+        aliases = {
+            "youtube": "youtube_captions",
+            "captions": "youtube_captions",
+            "transcript_api": "youtube_captions",
+            "youtube_transcript_api": "youtube_captions",
+            "yt_dlp": "ytdlp_captions",
+            "ytdlp": "ytdlp_captions",
+            "whisper": "openai_audio",
+            "openai": "openai_audio",
+            "audio": "openai_audio",
+        }
+
+        normalized = aliases.get(normalized, normalized)
+
+        allowed = {
+            "supadata",
+            "youtube_captions",
+            "ytdlp_captions",
+            "openai_audio",
+        }
+
+        return normalized if normalized in allowed else ""
+
+    def _run_transcript_strategy(
+        self,
+        strategy: str,
+        youtube_url: str,
+    ) -> List[TranscriptChunk]:
+        if strategy == "supadata":
+            return self._get_supadata_transcript(youtube_url)
+
+        if strategy == "youtube_captions":
+            return self._get_transcript_api_captions(youtube_url)
+
+        if strategy == "ytdlp_captions":
+            return self._get_youtube_captions_with_ytdlp(youtube_url)
+
+        if strategy == "openai_audio":
+            if self._should_skip_hosted_audio_transcription():
+                raise RuntimeError(
+                    "Hosted audio transcription is disabled on serverless runtime"
+                )
+
+            return self._transcribe_with_whisper(youtube_url)
+
+        raise RuntimeError(f"Unknown transcript strategy: {strategy}")
 
     def _should_skip_hosted_audio_transcription(self) -> bool:
         allow_audio = os.getenv(
@@ -139,25 +187,18 @@ class Agent1Ingestion:
 
         return any(os.getenv(marker) for marker in serverless_markers)
 
-    def _should_try_openai_transcription_first(self, provider: str) -> bool:
-        if provider in {"openai", "whisper"}:
-            return True
-
-        if provider in {"supadata", "captions", "youtube"}:
-            return False
-
-        if not os.getenv("OPENAI_API_KEY"):
-            return False
-
-        production_markers = [
-            "RENDER",
+    def _is_hosted_runtime(self) -> bool:
+        hosted_markers = [
             "VERCEL",
+            "RENDER",
+            "RAILWAY_ENVIRONMENT",
             "AWS_LAMBDA_FUNCTION_NAME",
             "AWS_EXECUTION_ENV",
             "FUNCTION_TARGET",
             "FUNCTIONS_WORKER_RUNTIME",
             "K_SERVICE",
         ]
+
         environment_values = [
             os.getenv("LECTUREFORGE_ENV"),
             os.getenv("APP_ENV"),
@@ -165,11 +206,9 @@ class Agent1Ingestion:
             os.getenv("ENVIRONMENT"),
             os.getenv("NODE_ENV"),
             os.getenv("VERCEL_ENV"),
-            os.getenv("RAILWAY_ENVIRONMENT"),
-            os.getenv("RENDER_EXTERNAL_HOSTNAME"),
         ]
 
-        return any(os.getenv(marker) for marker in production_markers) or any(
+        return any(os.getenv(marker) for marker in hosted_markers) or any(
             str(value).lower() in {"production", "prod"}
             for value in environment_values
             if value
@@ -486,6 +525,19 @@ class Agent1Ingestion:
         return result
 
     def _get_youtube_captions_with_ytdlp(self, youtube_url: str) -> List[TranscriptChunk]:
+        try:
+            chunks = self._get_youtube_captions_with_ytdlp_api(youtube_url)
+
+            if chunks:
+                return chunks
+        except Exception as e:
+            print(f"yt-dlp Python caption extraction failed: {str(e)}")
+
+        if self._is_serverless_runtime():
+            raise RuntimeError(
+                "yt-dlp caption command fallback is unavailable on serverless runtime"
+            )
+
         with tempfile.TemporaryDirectory() as temp_dir:
             output_template = os.path.join(temp_dir, "captions.%(ext)s")
 
@@ -525,6 +577,102 @@ class Agent1Ingestion:
                 raise ValueError("Caption file was found, but no usable text was parsed")
 
             return chunks
+
+    def _get_youtube_captions_with_ytdlp_api(self, youtube_url: str) -> List[TranscriptChunk]:
+        ydl_options = {
+            "quiet": True,
+            "no_warnings": True,
+            "skip_download": True,
+            "noplaylist": True,
+            "extractor_args": {
+                "youtube": {
+                    "player_client": ["default", "ios", "android"],
+                },
+            },
+        }
+
+        with YoutubeDL(ydl_options) as ydl:
+            info = ydl.extract_info(youtube_url, download=False)
+
+        for language, track in self._iter_caption_tracks(info):
+            try:
+                chunks = self._download_caption_track(track)
+
+                if chunks:
+                    print(f"yt-dlp found {language} captions through metadata")
+                    return chunks
+            except Exception as e:
+                print(f"Could not parse yt-dlp {language} caption track: {str(e)}")
+
+        raise ValueError("No usable captions found through yt-dlp metadata")
+
+    def _iter_caption_tracks(self, info: dict) -> Iterable[Tuple[str, dict]]:
+        subtitles = info.get("subtitles") or {}
+        automatic_captions = info.get("automatic_captions") or {}
+        preferred_languages = self._preferred_caption_languages(
+            list(subtitles.keys()) + list(automatic_captions.keys())
+        )
+
+        for language in preferred_languages:
+            for source in (subtitles, automatic_captions):
+                tracks = source.get(language) or []
+                track = self._select_best_caption_track(tracks)
+
+                if track:
+                    yield language, track
+
+    def _preferred_caption_languages(self, languages: List[str]) -> List[str]:
+        unique_languages = []
+
+        for language in languages:
+            if language and language not in unique_languages:
+                unique_languages.append(language)
+
+        preferred = []
+
+        for target in ("en", "en-US", "en-GB", "en-orig"):
+            for language in unique_languages:
+                if language == target and language not in preferred:
+                    preferred.append(language)
+
+        for language in unique_languages:
+            if language.startswith("en") and language not in preferred:
+                preferred.append(language)
+
+        for language in unique_languages:
+            if language not in preferred:
+                preferred.append(language)
+
+        return preferred
+
+    def _select_best_caption_track(self, tracks: List[dict]) -> Optional[dict]:
+        if not tracks:
+            return None
+
+        preferred_extensions = ["json3", "vtt", "srv3", "ttml"]
+
+        for extension in preferred_extensions:
+            for track in tracks:
+                if track.get("ext") == extension and track.get("url"):
+                    return track
+
+        for track in tracks:
+            if track.get("url"):
+                return track
+
+        return None
+
+    def _download_caption_track(self, track: dict) -> List[TranscriptChunk]:
+        response = requests.get(track["url"], timeout=45)
+        response.raise_for_status()
+
+        extension = (track.get("ext") or "").lower()
+        content_type = response.headers.get("content-type", "").lower()
+
+        if extension == "json3" or "json" in content_type:
+            return self._parse_json3_captions(response.json())
+
+        return self._parse_vtt_captions(response.text)
 
     def _select_best_caption_file(self, caption_files: List[str]) -> str:
         preferred_markers = [
@@ -572,6 +720,86 @@ class Agent1Ingestion:
             )
 
         return chunks
+
+    def _parse_vtt_captions(self, text: str) -> List[TranscriptChunk]:
+        chunks = []
+        current_start = None
+        current_end = None
+        current_text = []
+
+        for raw_line in text.splitlines():
+            line = raw_line.strip()
+
+            if not line or line.upper() == "WEBVTT" or line.startswith(("Kind:", "Language:")):
+                if current_start is not None and current_text:
+                    self._append_vtt_chunk(chunks, current_start, current_end, current_text)
+                current_start = None
+                current_end = None
+                current_text = []
+                continue
+
+            if "-->" in line:
+                if current_start is not None and current_text:
+                    self._append_vtt_chunk(chunks, current_start, current_end, current_text)
+
+                start_text, end_text = line.split("-->", 1)
+                current_start = self._parse_vtt_timestamp(start_text.strip())
+                current_end = self._parse_vtt_timestamp(end_text.strip().split()[0])
+                current_text = []
+                continue
+
+            if current_start is not None and not line.isdigit():
+                cleaned_line = re.sub(r"<[^>]+>", "", line)
+                current_text.append(cleaned_line)
+
+        if current_start is not None and current_text:
+            self._append_vtt_chunk(chunks, current_start, current_end, current_text)
+
+        return chunks
+
+    def _append_vtt_chunk(
+        self,
+        chunks: List[TranscriptChunk],
+        start: float,
+        end: float,
+        text_lines: List[str],
+    ):
+        text = clean_text(" ".join(text_lines))
+
+        if not text:
+            return
+
+        if end <= start:
+            end = start + 2
+
+        if chunks and chunks[-1].text == text:
+            chunks[-1].end = max(chunks[-1].end, end)
+            return
+
+        chunks.append(
+            TranscriptChunk(
+                start=start,
+                end=end,
+                text=text,
+            )
+        )
+
+    def _parse_vtt_timestamp(self, value: str) -> float:
+        timestamp = value.replace(",", ".")
+        parts = timestamp.split(":")
+
+        try:
+            if len(parts) == 3:
+                hours, minutes, seconds = parts
+                return int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+
+            if len(parts) == 2:
+                minutes, seconds = parts
+                return int(minutes) * 60 + float(seconds)
+
+            return float(parts[0])
+        except Exception:
+            return 0.0
 
     def _transcribe_with_whisper(self, youtube_url: str) -> List[TranscriptChunk]:
         with tempfile.TemporaryDirectory() as temp_dir:

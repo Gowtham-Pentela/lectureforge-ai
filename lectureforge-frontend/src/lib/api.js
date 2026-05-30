@@ -48,6 +48,27 @@ export async function processVideo(youtubeUrl) {
   return response.json();
 }
 
+export async function processTranscript({ lectureTitle, transcript }) {
+  const response = await fetch(`${API_BASE_URL}/process-transcript`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      lecture_title: lectureTitle || "Pasted lecture transcript",
+      transcript,
+      target_language: "English",
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(getErrorMessage(error, "Failed to process transcript"));
+  }
+
+  return response.json();
+}
+
 export async function getJobStatus(jobId) {
   const response = await fetch(`${API_BASE_URL}/job-status/${jobId}`);
 
