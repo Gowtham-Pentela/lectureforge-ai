@@ -99,7 +99,7 @@ class Agent1Ingestion:
     def _default_transcript_strategy(self) -> List[str]:
         strategies = ["youtube_captions"]
 
-        if os.getenv("SUPADATA_API_KEY"):
+        if self._is_supadata_enabled() and os.getenv("SUPADATA_API_KEY"):
             prefer_supadata = os.getenv(
                 "LECTUREFORGE_PREFER_SUPADATA",
                 "true" if self._is_hosted_runtime() else "false",
@@ -130,6 +130,9 @@ class Agent1Ingestion:
 
         normalized = aliases.get(normalized, normalized)
 
+        if normalized == "supadata" and not self._is_supadata_enabled():
+            return ""
+
         allowed = {
             "supadata",
             "youtube_captions",
@@ -138,6 +141,11 @@ class Agent1Ingestion:
         }
 
         return normalized if normalized in allowed else ""
+
+    def _is_supadata_enabled(self) -> bool:
+        enabled = os.getenv("LECTUREFORGE_ENABLE_SUPADATA", "").strip().lower()
+
+        return enabled in {"true", "1", "yes"}
 
     def _run_transcript_strategy(
         self,

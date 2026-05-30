@@ -1749,6 +1749,21 @@ def build_public_error_message(raw_error: str):
             "raw_error": raw_error,
         }
 
+    if (
+        youtube_cloud_blocked
+        and "hosted audio transcription is disabled on serverless runtime" in lower_error
+    ):
+        return {
+            "error_code": "YOUTUBE_HOSTED_EXTRACTION_BLOCKED",
+            "message": (
+                "YouTube blocked transcript extraction from the hosted backend. "
+                "Add YouTube cookies, use a rotating residential proxy, or paste "
+                "the lecture transcript below to keep building the study kit."
+            ),
+            "can_continue_with_transcript": True,
+            "raw_error": raw_error,
+        }
+
     if "hosted audio transcription is disabled on serverless runtime" in lower_error:
         return {
             "error_code": "SERVERLESS_AUDIO_TRANSCRIPTION_UNAVAILABLE",

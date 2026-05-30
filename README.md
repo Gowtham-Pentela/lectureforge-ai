@@ -297,12 +297,12 @@ Agent 1 extracts the lecture transcript.
 
 Current ingestion strategy:
 
-1. Supadata transcript API
-2. youtube-transcript-api fallback
-3. yt-dlp captions fallback
-4. Whisper audio transcription fallback
+1. youtube-transcript-api captions
+2. yt-dlp captions fallback
+3. Optional Whisper audio transcription fallback for non-serverless workers
+4. Optional Supadata fallback only when `LECTUREFORGE_ENABLE_SUPADATA=true`
 
-Supadata is used first in deployment because cloud platforms like Render can be blocked by YouTube when trying to fetch captions directly.
+Supadata is disabled by default so the app does not depend on paid transcript credits. If cloud platforms like Render are blocked by YouTube, use yt-dlp cookies or a rotating residential proxy.
 
 ---
 
@@ -451,7 +451,6 @@ The audit adapts feedback based on the lecture type instead of using a one-size-
 
 * FastAPI
 * OpenAI API
-* Supadata Transcript API
 * youtube-transcript-api
 * yt-dlp
 * NumPy
@@ -538,7 +537,8 @@ OPENAI_API_KEY=your_openai_api_key_here
 OPENAI_MODEL=gpt-4o-mini
 OPENAI_EMBEDDING_MODEL=text-embedding-3-small
 
-SUPADATA_API_KEY=your_supadata_api_key_here
+LECTUREFORGE_TRANSCRIPT_STRATEGY=youtube_captions,ytdlp_captions
+LECTUREFORGE_ALLOW_HOSTED_AUDIO_TRANSCRIPTION=false
 ```
 
 ---
@@ -745,7 +745,9 @@ curl -s http://localhost:8000/faculty-audit/YOUR_JOB_ID | python3 -m json.tool
 OPENAI_API_KEY=
 OPENAI_MODEL=gpt-4o-mini
 OPENAI_EMBEDDING_MODEL=text-embedding-3-small
-SUPADATA_API_KEY=
+LECTUREFORGE_TRANSCRIPT_STRATEGY=youtube_captions,ytdlp_captions
+LECTUREFORGE_ENABLE_SUPADATA=false
+LECTUREFORGE_ALLOW_HOSTED_AUDIO_TRANSCRIPTION=false
 ```
 
 ### Frontend
@@ -780,8 +782,8 @@ Add environment variables in Render:
 OPENAI_API_KEY=your_openai_api_key_here
 OPENAI_MODEL=gpt-4o-mini
 OPENAI_EMBEDDING_MODEL=text-embedding-3-small
-SUPADATA_API_KEY=your_supadata_api_key_here
-LECTUREFORGE_TRANSCRIPT_STRATEGY=youtube_captions,ytdlp_captions,supadata
+LECTUREFORGE_TRANSCRIPT_STRATEGY=youtube_captions,ytdlp_captions
+LECTUREFORGE_ENABLE_SUPADATA=false
 LECTUREFORGE_ALLOW_HOSTED_AUDIO_TRANSCRIPTION=false
 ```
 
@@ -825,7 +827,7 @@ VITE_API_BASE_URL=https://your-render-backend-url.onrender.com
 * Search embeddings are generated from the English transcript for efficiency.
 * Translated search queries are converted back to English before semantic search.
 * Faculty audit reports are generated from transcript evidence, so transcript quality affects audit quality.
-* Direct YouTube caption access can be blocked from cloud IPs. Production deployments should use Supadata, a rotating residential proxy, or yt-dlp cookies as a transcript fallback.
+* Direct YouTube caption access can be blocked from cloud IPs. Production deployments should use yt-dlp cookies or a rotating residential proxy as the transcript fallback.
 
 ---
 
