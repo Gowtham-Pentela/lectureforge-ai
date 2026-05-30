@@ -688,11 +688,32 @@ class Agent1Ingestion:
         )
 
     def _get_youtube_proxy_url(self) -> str:
-        return (
+        proxy_url = (
             os.getenv("LECTUREFORGE_YOUTUBE_PROXY_URL")
             or os.getenv("YOUTUBE_PROXY_URL")
             or ""
         ).strip()
+
+        if not proxy_url:
+            return ""
+
+        placeholder_fragments = [
+            "username:password",
+            "@host:port",
+            "real_username",
+            "real_password",
+            "real_host",
+            "real_port",
+        ]
+
+        if any(fragment in proxy_url for fragment in placeholder_fragments):
+            print(
+                "Ignoring placeholder YouTube proxy URL. "
+                "Set LECTUREFORGE_YOUTUBE_PROXY_URL to a real proxy or leave it blank."
+            )
+            return ""
+
+        return proxy_url
 
     def _prepare_youtube_cookie_file(self, temp_dir: str) -> Optional[str]:
         existing_path = os.getenv("LECTUREFORGE_YOUTUBE_COOKIES_PATH", "").strip()

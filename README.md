@@ -302,7 +302,7 @@ Current ingestion strategy:
 3. Optional Whisper audio transcription fallback for non-serverless workers
 4. Optional Supadata fallback only when `LECTUREFORGE_ENABLE_SUPADATA=true`
 
-Supadata is disabled by default so the app does not depend on paid transcript credits. If cloud platforms like Render are blocked by YouTube, use yt-dlp cookies or a rotating residential proxy.
+Supadata is disabled by default so the app does not depend on paid transcript credits. If cloud platforms like Render are blocked by YouTube, use yt-dlp cookies or the pasted-transcript fallback.
 
 ---
 
@@ -787,13 +787,9 @@ LECTUREFORGE_ENABLE_SUPADATA=false
 LECTUREFORGE_ALLOW_HOSTED_AUDIO_TRANSCRIPTION=false
 ```
 
-If Render's cloud IP is blocked by YouTube, configure one of these deployment
-escape hatches:
+If Render's cloud IP is blocked by YouTube, configure yt-dlp cookies:
 
 ```env
-# Rotating residential proxy used by youtube-transcript-api and yt-dlp.
-LECTUREFORGE_YOUTUBE_PROXY_URL=http://username:password@host:port
-
 # Optional yt-dlp cookies.txt in base64 form.
 # macOS: base64 -i cookies.txt | pbcopy
 LECTUREFORGE_YOUTUBE_COOKIES_B64=base64_encoded_netscape_cookies_txt
@@ -827,7 +823,7 @@ VITE_API_BASE_URL=https://your-render-backend-url.onrender.com
 * Search embeddings are generated from the English transcript for efficiency.
 * Translated search queries are converted back to English before semantic search.
 * Faculty audit reports are generated from transcript evidence, so transcript quality affects audit quality.
-* Direct YouTube caption access can be blocked from cloud IPs. Production deployments should use yt-dlp cookies or a rotating residential proxy as the transcript fallback.
+* Direct YouTube caption access can be blocked from cloud IPs. Production deployments should use yt-dlp cookies or the pasted-transcript flow as the transcript fallback.
 
 ---
 
