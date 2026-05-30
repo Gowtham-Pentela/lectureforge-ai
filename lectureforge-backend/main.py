@@ -1719,14 +1719,28 @@ def build_translation_error_detail(
 def build_public_error_message(raw_error: str):
     lower_error = raw_error.lower()
 
+    if "hosted audio transcription is disabled on serverless runtime" in lower_error:
+        return {
+            "error_code": "SERVERLESS_AUDIO_TRANSCRIPTION_UNAVAILABLE",
+            "message": (
+                "This video does not expose usable captions, and hosted audio "
+                "transcription is disabled on the serverless backend to avoid long "
+                "timeouts. Use a captioned lecture, paste a transcript, or run the "
+                "backend on a worker service for no-caption videos."
+            ),
+            "can_continue_with_transcript": False,
+            "raw_error": raw_error,
+        }
+
     if "openai whisper" in lower_error and "transcription failed" in lower_error:
         return {
             "error_code": "OPENAI_TRANSCRIPTION_ERROR",
             "message": (
                 "OpenAI could not transcribe this video from the hosted backend. "
-                "Try a shorter public lecture URL or another video."
+                "Use a captioned lecture, paste a transcript, or run audio "
+                "transcription from a longer-lived backend worker."
             ),
-            "can_continue_with_transcript": True,
+            "can_continue_with_transcript": False,
             "raw_error": raw_error,
         }
 

@@ -28,6 +28,7 @@ class Agent1Ingestion:
         use_supadata = provider == "supadata"
         use_captions = provider not in {"openai_only", "whisper_only"}
         use_openai = provider not in {"supadata", "captions", "youtube"}
+        use_ytdlp_captions = provider != "captions_fast"
 
         if use_supadata:
             try:
@@ -57,30 +58,36 @@ class Agent1Ingestion:
                 errors.append(f"youtube-transcript-api failed: {str(e)}")
                 print(f"youtube-transcript-api failed: {str(e)}")
 
-            try:
-                chunks = self._get_youtube_captions_with_ytdlp(youtube_url)
-                if chunks and len(chunks) > 3:
-                    print(f"yt-dlp caption extraction succeeded with {len(chunks)} chunks")
-                    return merge_small_chunks(chunks)
+            if use_ytdlp_captions and not self._is_serverless_runtime():
+                try:
+                    chunks = self._get_youtube_captions_with_ytdlp(youtube_url)
+                    if chunks and len(chunks) > 3:
+                        print(f"yt-dlp caption extraction succeeded with {len(chunks)} chunks")
+                        return merge_small_chunks(chunks)
 
-                errors.append("yt-dlp captions returned too few chunks")
-            except Exception as e:
-                errors.append(f"yt-dlp captions failed: {str(e)}")
-                print(f"yt-dlp captions failed: {str(e)}")
+                    errors.append("yt-dlp captions returned too few chunks")
+                except Exception as e:
+                    errors.append(f"yt-dlp captions failed: {str(e)}")
+                    print(f"yt-dlp captions failed: {str(e)}")
 
         if use_openai:
-            try:
-                chunks = self._transcribe_with_whisper(youtube_url)
-                if chunks and len(chunks) > 0:
-                    print(
-                        f"OpenAI Whisper transcription succeeded with {len(chunks)} chunks"
-                    )
-                    return merge_small_chunks(chunks)
+            if self._should_skip_hosted_audio_transcription():
+                errors.append(
+                    "Hosted audio transcription is disabled on serverless runtime"
+                )
+            else:
+                try:
+                    chunks = self._transcribe_with_whisper(youtube_url)
+                    if chunks and len(chunks) > 0:
+                        print(
+                            f"OpenAI Whisper transcription succeeded with {len(chunks)} chunks"
+                        )
+                        return merge_small_chunks(chunks)
 
-                errors.append("OpenAI Whisper returned no chunks")
-            except Exception as e:
-                errors.append(f"OpenAI Whisper transcription failed: {str(e)}")
-                print(f"OpenAI Whisper transcription failed: {str(e)}")
+                    errors.append("OpenAI Whisper returned no chunks")
+                except Exception as e:
+                    errors.append(f"OpenAI Whisper transcription failed: {str(e)}")
+                    print(f"OpenAI Whisper transcription failed: {str(e)}")
 
         raise RuntimeError(
             "Could not extract transcript from this YouTube URL. "
@@ -95,6 +102,29 @@ class Agent1Ingestion:
             return provider
 
         return "auto"
+
+    def _should_skip_hosted_audio_transcription(self) -> bool:
+        allow_audio = os.getenv(
+            "LECTUREFORGE_ALLOW_HOSTED_AUDIO_TRANSCRIPTION",
+            "",
+        ).strip().lower()
+
+        if allow_audio in {"true", "1", "yes"}:
+            return False
+
+        return self._is_serverless_runtime()
+
+    def _is_serverless_runtime(self) -> bool:
+        serverless_markers = [
+            "VERCEL",
+            "AWS_LAMBDA_FUNCTION_NAME",
+            "AWS_EXECUTION_ENV",
+            "FUNCTION_TARGET",
+            "FUNCTIONS_WORKER_RUNTIME",
+            "K_SERVICE",
+        ]
+
+        return any(os.getenv(marker) for marker in serverless_markers)
 
     def _should_try_openai_transcription_first(self, provider: str) -> bool:
         if provider in {"openai", "whisper"}:
@@ -430,6 +460,7 @@ class Agent1Ingestion:
             command,
             capture_output=True,
             text=True,
+            timeout=int(os.getenv("YTDLP_COMMAND_TIMEOUT_SECONDS", "15")),
         )
 
         if result.returncode != 0:

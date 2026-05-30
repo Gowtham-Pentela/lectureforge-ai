@@ -6,6 +6,7 @@ export default function ProgressCard({ status }) {
 
   const isFailed = status.status === "failed";
   const isCompleted = status.status === "completed";
+  const failureHint = getFailureHint(status);
   const title = isCompleted
     ? "Study kit ready"
     : isFailed
@@ -58,10 +59,9 @@ export default function ProgressCard({ status }) {
         {isFailed && status.error && (
           <div className="mx-auto mt-6 max-w-2xl rounded-2xl border border-red-100 bg-red-50 p-4 text-sm leading-6 text-red-700">
             <p className="font-semibold">{status.error}</p>
-            {status.can_continue_with_transcript && (
+            {failureHint && (
               <p className="mt-1 text-red-600">
-                This video may be blocked for automated access. Try another
-                public captioned lecture URL.
+                {failureHint}
               </p>
             )}
           </div>
@@ -69,4 +69,24 @@ export default function ProgressCard({ status }) {
       </div>
     </section>
   );
+}
+
+function getFailureHint(status) {
+  if (!status) {
+    return "";
+  }
+
+  if (status.error_code === "SERVERLESS_AUDIO_TRANSCRIPTION_UNAVAILABLE") {
+    return "No-caption videos need a longer-running backend worker. Captioned videos should still process quickly.";
+  }
+
+  if (status.error_code === "OPENAI_TRANSCRIPTION_ERROR") {
+    return "The hosted backend could not complete audio transcription for this video.";
+  }
+
+  if (status.can_continue_with_transcript) {
+    return "This video may be blocked for automated access. Try another public captioned lecture URL.";
+  }
+
+  return "";
 }
