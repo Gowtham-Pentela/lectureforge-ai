@@ -3,6 +3,7 @@ import re
 import json
 import time
 import random
+import base64
 import tempfile
 import subprocess
 from typing import List, Optional, Iterable, Tuple
@@ -13,6 +14,7 @@ from openai import OpenAI
 from dotenv import load_dotenv
 from yt_dlp import YoutubeDL
 from youtube_transcript_api import YouTubeTranscriptApi
+from youtube_transcript_api.proxies import GenericProxyConfig
 
 from models.schemas import TranscriptChunk
 from utils.transcript_utils import clean_text, merge_small_chunks
@@ -361,7 +363,7 @@ class Agent1Ingestion:
     def _get_transcript_api_captions(self, youtube_url: str) -> List[TranscriptChunk]:
         video_id = self._extract_video_id(youtube_url)
 
-        api = YouTubeTranscriptApi()
+        api = YouTubeTranscriptApi(proxy_config=self._build_youtube_proxy_config())
 
         transcript_data = None
 
@@ -517,16 +519,51 @@ class Agent1Ingestion:
 
         if result.returncode != 0:
             raise RuntimeError(
-                f"Command failed: {' '.join(command)}\n"
+                f"Command failed: {self._redact_command_for_logs(command)}\n"
                 f"STDOUT:\n{result.stdout}\n"
                 f"STDERR:\n{result.stderr}"
             )
 
         return result
 
+    def _redact_command_for_logs(self, command: List[str]) -> str:
+        redacted = []
+        sensitive_next = False
+
+        for part in command:
+            if sensitive_next:
+                redacted.append("[redacted]")
+                sensitive_next = False
+                continue
+
+            redacted.append(part)
+
+            if part in {"--proxy", "--cookies"}:
+                sensitive_next = True
+
+        return " ".join(redacted)
+
     def _get_youtube_captions_with_ytdlp(self, youtube_url: str) -> List[TranscriptChunk]:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            cookie_file = self._prepare_youtube_cookie_file(temp_dir)
+
+            return self._get_youtube_captions_with_ytdlp_in_temp_dir(
+                youtube_url=youtube_url,
+                temp_dir=temp_dir,
+                cookie_file=cookie_file,
+            )
+
+    def _get_youtube_captions_with_ytdlp_in_temp_dir(
+        self,
+        youtube_url: str,
+        temp_dir: str,
+        cookie_file: Optional[str],
+    ) -> List[TranscriptChunk]:
         try:
-            chunks = self._get_youtube_captions_with_ytdlp_api(youtube_url)
+            chunks = self._get_youtube_captions_with_ytdlp_api(
+                youtube_url=youtube_url,
+                cookie_file=cookie_file,
+            )
 
             if chunks:
                 return chunks
@@ -538,47 +575,52 @@ class Agent1Ingestion:
                 "yt-dlp caption command fallback is unavailable on serverless runtime"
             )
 
-        with tempfile.TemporaryDirectory() as temp_dir:
-            output_template = os.path.join(temp_dir, "captions.%(ext)s")
+        output_template = os.path.join(temp_dir, "captions.%(ext)s")
 
-            command = [
-                "yt-dlp",
-                "--write-auto-subs",
-                "--write-subs",
-                "--sub-lang",
-                "en.*,en,all",
-                "--sub-format",
-                "json3",
-                "--skip-download",
-                "-o",
-                output_template,
-                youtube_url,
-            ]
+        command = [
+            "yt-dlp",
+            "--write-auto-subs",
+            "--write-subs",
+            "--sub-lang",
+            "en.*,en,all",
+            "--sub-format",
+            "json3",
+            "--skip-download",
+            "-o",
+            output_template,
+        ]
 
-            self._run_command(command)
+        self._append_ytdlp_network_options(command, cookie_file)
+        command.append(youtube_url)
 
-            caption_files = [
-                os.path.join(temp_dir, file)
-                for file in os.listdir(temp_dir)
-                if file.endswith(".json3")
-            ]
+        self._run_command(command)
 
-            if not caption_files:
-                raise ValueError("No captions found through yt-dlp")
+        caption_files = [
+            os.path.join(temp_dir, file)
+            for file in os.listdir(temp_dir)
+            if file.endswith(".json3")
+        ]
 
-            caption_file = self._select_best_caption_file(caption_files)
+        if not caption_files:
+            raise ValueError("No captions found through yt-dlp")
 
-            with open(caption_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
+        caption_file = self._select_best_caption_file(caption_files)
 
-            chunks = self._parse_json3_captions(data)
+        with open(caption_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
 
-            if not chunks:
-                raise ValueError("Caption file was found, but no usable text was parsed")
+        chunks = self._parse_json3_captions(data)
 
-            return chunks
+        if not chunks:
+            raise ValueError("Caption file was found, but no usable text was parsed")
 
-    def _get_youtube_captions_with_ytdlp_api(self, youtube_url: str) -> List[TranscriptChunk]:
+        return chunks
+
+    def _get_youtube_captions_with_ytdlp_api(
+        self,
+        youtube_url: str,
+        cookie_file: Optional[str],
+    ) -> List[TranscriptChunk]:
         ydl_options = {
             "quiet": True,
             "no_warnings": True,
@@ -590,6 +632,13 @@ class Agent1Ingestion:
                 },
             },
         }
+        proxy_url = self._get_youtube_proxy_url()
+
+        if proxy_url:
+            ydl_options["proxy"] = proxy_url
+
+        if cookie_file:
+            ydl_options["cookiefile"] = cookie_file
 
         with YoutubeDL(ydl_options) as ydl:
             info = ydl.extract_info(youtube_url, download=False)
@@ -605,6 +654,96 @@ class Agent1Ingestion:
                 print(f"Could not parse yt-dlp {language} caption track: {str(e)}")
 
         raise ValueError("No usable captions found through yt-dlp metadata")
+
+    def _append_ytdlp_network_options(
+        self,
+        command: List[str],
+        cookie_file: Optional[str],
+    ):
+        proxy_url = self._get_youtube_proxy_url()
+
+        if proxy_url:
+            command.extend(["--proxy", proxy_url])
+
+        if cookie_file:
+            command.extend(["--cookies", cookie_file])
+
+    def _build_youtube_proxy_config(self):
+        proxy_url = self._get_youtube_proxy_url()
+
+        if not proxy_url:
+            return None
+
+        return GenericProxyConfig(
+            http_url=proxy_url,
+            https_url=proxy_url,
+        )
+
+    def _get_youtube_proxy_url(self) -> str:
+        return (
+            os.getenv("LECTUREFORGE_YOUTUBE_PROXY_URL")
+            or os.getenv("YOUTUBE_PROXY_URL")
+            or ""
+        ).strip()
+
+    def _prepare_youtube_cookie_file(self, temp_dir: str) -> Optional[str]:
+        existing_path = os.getenv("LECTUREFORGE_YOUTUBE_COOKIES_PATH", "").strip()
+
+        if existing_path:
+            if not os.path.exists(existing_path):
+                raise RuntimeError("LECTUREFORGE_YOUTUBE_COOKIES_PATH does not exist")
+
+            return existing_path
+
+        cookie_text = self._get_youtube_cookie_text()
+
+        if not cookie_text:
+            return None
+
+        cookie_file = os.path.join(temp_dir, "youtube-cookies.txt")
+
+        with open(cookie_file, "w", encoding="utf-8") as f:
+            f.write(cookie_text)
+            if not cookie_text.endswith("\n"):
+                f.write("\n")
+
+        return cookie_file
+
+    def _get_youtube_cookie_text(self) -> str:
+        encoded_cookies = os.getenv("LECTUREFORGE_YOUTUBE_COOKIES_B64", "").strip()
+
+        if encoded_cookies:
+            try:
+                cookie_text = base64.b64decode(encoded_cookies).decode("utf-8")
+            except Exception as e:
+                raise RuntimeError(
+                    "LECTUREFORGE_YOUTUBE_COOKIES_B64 is not valid base64 text"
+                ) from e
+
+            return self._normalize_cookie_text(cookie_text)
+
+        cookie_text = os.getenv("LECTUREFORGE_YOUTUBE_COOKIES_TEXT", "").strip()
+
+        if cookie_text:
+            return self._normalize_cookie_text(cookie_text)
+
+        return ""
+
+    def _normalize_cookie_text(self, cookie_text: str) -> str:
+        cookie_text = cookie_text.replace("\\n", "\n").strip()
+
+        if not cookie_text:
+            return ""
+
+        valid_headers = (
+            "# Netscape HTTP Cookie File",
+            "# HTTP Cookie File",
+        )
+
+        if cookie_text.startswith(valid_headers):
+            return cookie_text
+
+        return "# Netscape HTTP Cookie File\n" + cookie_text
 
     def _iter_caption_tracks(self, info: dict) -> Iterable[Tuple[str, dict]]:
         subtitles = info.get("subtitles") or {}

@@ -1719,6 +1719,36 @@ def build_translation_error_detail(
 def build_public_error_message(raw_error: str):
     lower_error = raw_error.lower()
 
+    youtube_cloud_blocked = (
+        "youtube is blocking requests from your ip" in lower_error
+        or "sign in to confirm" in lower_error
+        or "not a bot" in lower_error
+        or "cloud provider" in lower_error
+        or ("http error 429" in lower_error and "youtube" in lower_error)
+        or ("too many requests" in lower_error and "youtube" in lower_error)
+    )
+    supadata_limit_exceeded = (
+        "supadata" in lower_error
+        and (
+            "limit-exceeded" in lower_error
+            or "limit exceeded" in lower_error
+            or "plan usage limit was exceeded" in lower_error
+            or "status 429" in lower_error
+        )
+    )
+
+    if youtube_cloud_blocked and supadata_limit_exceeded:
+        return {
+            "error_code": "TRANSCRIPT_FALLBACKS_EXHAUSTED",
+            "message": (
+                "YouTube blocked transcript extraction from the hosted backend, "
+                "and the Supadata fallback has reached its plan limit. Paste the "
+                "lecture transcript below to keep building the study kit."
+            ),
+            "can_continue_with_transcript": True,
+            "raw_error": raw_error,
+        }
+
     if "hosted audio transcription is disabled on serverless runtime" in lower_error:
         return {
             "error_code": "SERVERLESS_AUDIO_TRANSCRIPTION_UNAVAILABLE",
@@ -1802,6 +1832,17 @@ def build_public_error_message(raw_error: str):
             "raw_error": raw_error,
         }
 
+    if supadata_limit_exceeded:
+        return {
+            "error_code": "SUPADATA_LIMIT_EXCEEDED",
+            "message": (
+                "Supadata reached its plan limit while acting as the transcript fallback. "
+                "Paste the lecture transcript below, or retry after the limit resets."
+            ),
+            "can_continue_with_transcript": True,
+            "raw_error": raw_error,
+        }
+
     if "supadata request failed" in lower_error:
         return {
             "error_code": "SUPADATA_TRANSCRIPT_ERROR",
@@ -1823,14 +1864,7 @@ def build_public_error_message(raw_error: str):
             "raw_error": raw_error,
         }
 
-    if (
-        "youtube is blocking requests from your ip" in lower_error
-        or "sign in to confirm" in lower_error
-        or "not a bot" in lower_error
-        or "cloud provider" in lower_error
-        or ("http error 429" in lower_error and "youtube" in lower_error)
-        or ("too many requests" in lower_error and "youtube" in lower_error)
-    ):
+    if youtube_cloud_blocked:
         return {
             "error_code": "YOUTUBE_CLOUD_IP_BLOCKED",
             "message": (

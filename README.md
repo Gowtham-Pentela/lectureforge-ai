@@ -781,6 +781,20 @@ OPENAI_API_KEY=your_openai_api_key_here
 OPENAI_MODEL=gpt-4o-mini
 OPENAI_EMBEDDING_MODEL=text-embedding-3-small
 SUPADATA_API_KEY=your_supadata_api_key_here
+LECTUREFORGE_TRANSCRIPT_STRATEGY=youtube_captions,ytdlp_captions,supadata
+LECTUREFORGE_ALLOW_HOSTED_AUDIO_TRANSCRIPTION=false
+```
+
+If Render's cloud IP is blocked by YouTube, configure one of these deployment
+escape hatches:
+
+```env
+# Rotating residential proxy used by youtube-transcript-api and yt-dlp.
+LECTUREFORGE_YOUTUBE_PROXY_URL=http://username:password@host:port
+
+# Optional yt-dlp cookies.txt in base64 form.
+# macOS: base64 -i cookies.txt | pbcopy
+LECTUREFORGE_YOUTUBE_COOKIES_B64=base64_encoded_netscape_cookies_txt
 ```
 
 ---
@@ -811,7 +825,7 @@ VITE_API_BASE_URL=https://your-render-backend-url.onrender.com
 * Search embeddings are generated from the English transcript for efficiency.
 * Translated search queries are converted back to English before semantic search.
 * Faculty audit reports are generated from transcript evidence, so transcript quality affects audit quality.
-* Supadata is used for transcript extraction in deployment because direct YouTube caption access can be blocked from cloud IPs.
+* Direct YouTube caption access can be blocked from cloud IPs. Production deployments should use Supadata, a rotating residential proxy, or yt-dlp cookies as a transcript fallback.
 
 ---
 
