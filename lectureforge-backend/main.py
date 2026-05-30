@@ -29,6 +29,7 @@ from models.schemas import (
 )
 
 from services.job_store import JobStore
+from services.video_cache import VideoCache
 from services.openai_service import create_embedding, generate_text, generate_json
 from agents.agent1_ingestion import Agent1Ingestion
 from agents.agent2_analysis import Agent2Analysis
@@ -45,7 +46,7 @@ from utils.faculty_audit_validator import validate_faculty_audit
 
 app = FastAPI(
     title="LectureForge AI Backend",
-    description="AI backend for turning YouTube lectures into student study kits and private faculty audits",
+    description="AI backend for turning YouTube lectures into student study kits",
     version="0.2.0",
 )
 
@@ -65,6 +66,7 @@ app.add_middleware(
 
 
 job_store = JobStore()
+video_cache = VideoCache()
 
 agent1 = Agent1Ingestion()
 agent2 = Agent2Analysis()
@@ -79,7 +81,6 @@ def root():
         "docs": "/docs",
         "capabilities": [
             "student_study_kit",
-            "faculty_lecture_audit",
         ],
     }
 
@@ -126,12 +127,55 @@ if os.getenv("LECTUREFORGE_ENABLE_DEBUG_ENDPOINTS") == "true":
 async def process_video(request: ProcessVideoRequest):
     job_id = str(uuid.uuid4())
     job_store.create_job(job_id)
+    youtube_video_id = extract_youtube_video_id_safe(request.youtube_url)
+    cached_study_kit = video_cache.get_completed_study_kit(
+        youtube_video_id=youtube_video_id,
+        user_id=request.user_id,
+    )
+
+    if cached_study_kit:
+        study_kit = StudyKit(**cached_study_kit)
+        study_kit = validate_study_kit(study_kit)
+        job_store.update_job(
+            job_id,
+            status="completed",
+            progress=100,
+            message="Study kit loaded from cache",
+            study_kit=study_kit,
+            embeddings=[],
+            search_index_status="queued",
+            ready_sections=[
+                "transcript",
+                "outline",
+                "summaries",
+                "concept_map",
+                "flashcards",
+            ],
+            user_id=request.user_id,
+            youtube_url=request.youtube_url,
+            youtube_video_id=youtube_video_id,
+        )
+
+        return ProcessVideoResponse(
+            job_id=job_id,
+            status="completed",
+            message="Study kit loaded from cache",
+        )
+
+    job_store.update_job(
+        job_id,
+        user_id=request.user_id,
+        youtube_url=request.youtube_url,
+        youtube_video_id=youtube_video_id,
+    )
 
     asyncio.create_task(
         run_video_processing_pipeline(
             job_id=job_id,
             youtube_url=request.youtube_url,
             target_language="English",
+            user_id=request.user_id,
+            youtube_video_id=youtube_video_id,
         )
     )
 
@@ -215,6 +259,8 @@ async def run_video_processing_pipeline(
     job_id: str,
     youtube_url: str,
     target_language: str,
+    user_id: str = None,
+    youtube_video_id: str = None,
 ):
     try:
         job_store.update_job(
@@ -229,11 +275,19 @@ async def run_video_processing_pipeline(
             youtube_url,
         )
 
-        await run_common_study_pipeline(
+        study_kit = await run_common_study_pipeline(
             job_id=job_id,
             transcript_chunks=transcript_chunks,
             target_language=target_language,
             lecture_title_override=None,
+        )
+
+        video_cache.save_completed_study_kit(
+            youtube_video_id=youtube_video_id,
+            youtube_url=youtube_url,
+            study_kit=study_kit,
+            user_id=user_id,
+            transcript_provider=os.getenv("LECTUREFORGE_TRANSCRIPT_PROVIDER", "auto"),
         )
 
     except Exception as e:
@@ -591,6 +645,8 @@ async def run_common_study_pipeline(
 
     asyncio.create_task(build_semantic_search_index(job_id))
 
+    return partial_study_kit
+
 
 async def build_semantic_search_index(job_id: str):
     try:
@@ -631,6 +687,11 @@ async def build_semantic_search_index(job_id: str):
             embeddings=embeddings,
             search_index_status="ready",
             search_index_error="",
+        )
+
+        video_cache.save_embeddings(
+            youtube_video_id=job.get("youtube_video_id"),
+            embeddings=embeddings,
         )
 
     except Exception as e:
@@ -1418,6 +1479,13 @@ def get_study_kit_dict(study_kit):
     )
 
 
+def extract_youtube_video_id_safe(youtube_url: str):
+    try:
+        return agent1._extract_video_id(youtube_url)
+    except Exception:
+        return None
+
+
 def get_study_kit_value(study_kit, key: str):
     if isinstance(study_kit, dict):
         return study_kit.get(key)
@@ -1650,6 +1718,17 @@ def build_translation_error_detail(
 
 def build_public_error_message(raw_error: str):
     lower_error = raw_error.lower()
+
+    if "openai whisper" in lower_error and "transcription failed" in lower_error:
+        return {
+            "error_code": "OPENAI_TRANSCRIPTION_ERROR",
+            "message": (
+                "OpenAI could not transcribe this video from the hosted backend. "
+                "Try a shorter public lecture URL or another video."
+            ),
+            "can_continue_with_transcript": True,
+            "raw_error": raw_error,
+        }
 
     if "supadata request failed" in lower_error:
         return {

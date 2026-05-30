@@ -22,6 +22,9 @@ class JobStore:
             "search_index_status": "pending",
             "search_index_error": None,
             "ready_sections": [],
+            "user_id": None,
+            "youtube_url": None,
+            "youtube_video_id": None,
             "translations": {},
             "translation_sections": {},
         }
@@ -42,6 +45,9 @@ class JobStore:
         search_index_status: Optional[str] = None,
         search_index_error: Optional[str] = None,
         ready_sections: Any = None,
+        user_id: Optional[str] = None,
+        youtube_url: Optional[str] = None,
+        youtube_video_id: Optional[str] = None,
     ):
         if job_id not in self.jobs:
             return
@@ -86,6 +92,15 @@ class JobStore:
 
         if ready_sections is not None:
             job["ready_sections"] = ready_sections
+
+        if user_id is not None:
+            job["user_id"] = user_id
+
+        if youtube_url is not None:
+            job["youtube_url"] = youtube_url
+
+        if youtube_video_id is not None:
+            job["youtube_video_id"] = youtube_video_id
 
     def get_job(self, job_id: str):
         return self.jobs.get(job_id)

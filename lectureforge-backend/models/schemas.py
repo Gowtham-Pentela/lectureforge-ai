@@ -83,6 +83,7 @@ class StudyKit(BaseModel):
 class ProcessVideoRequest(BaseModel):
     youtube_url: str
     target_language: Optional[str] = "English"
+    user_id: Optional[str] = None
 
 
 class ProcessTranscriptRequest(BaseModel):

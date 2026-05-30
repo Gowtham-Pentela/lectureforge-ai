@@ -10,6 +10,23 @@ function getErrorMessage(error, fallback) {
   );
 }
 
+function getLectureForgeUserId() {
+  const storageKey = "lectureforge_user_id";
+  const existingId = localStorage.getItem(storageKey);
+
+  if (existingId) {
+    return existingId;
+  }
+
+  const nextId =
+    typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `user_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+
+  localStorage.setItem(storageKey, nextId);
+  return nextId;
+}
+
 export async function processVideo(youtubeUrl) {
   const response = await fetch(`${API_BASE_URL}/process-video`, {
     method: "POST",
@@ -19,6 +36,7 @@ export async function processVideo(youtubeUrl) {
     body: JSON.stringify({
       youtube_url: youtubeUrl,
       target_language: "English",
+      user_id: getLectureForgeUserId(),
     }),
   });
 

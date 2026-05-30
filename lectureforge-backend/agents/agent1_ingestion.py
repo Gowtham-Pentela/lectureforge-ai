@@ -10,6 +10,7 @@ from urllib.parse import urlparse, parse_qs
 import requests
 from openai import OpenAI
 from dotenv import load_dotenv
+from yt_dlp import YoutubeDL
 from youtube_transcript_api import YouTubeTranscriptApi
 
 from models.schemas import TranscriptChunk
@@ -23,10 +24,51 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 class Agent1Ingestion:
     def get_transcript(self, youtube_url: str) -> List[TranscriptChunk]:
         errors = []
-        tried_openai_first = False
+        provider = self._get_transcript_provider()
+        use_supadata = provider == "supadata"
+        use_captions = provider not in {"openai_only", "whisper_only"}
+        use_openai = provider not in {"supadata", "captions", "youtube"}
 
-        if self._should_try_openai_transcription_first():
-            tried_openai_first = True
+        if use_supadata:
+            try:
+                chunks = self._get_supadata_transcript(youtube_url)
+                if chunks and len(chunks) > 3:
+                    if self._chunks_look_english(chunks):
+                        print(f"Supadata transcript extraction succeeded with {len(chunks)} chunks")
+                        return merge_small_chunks(chunks)
+
+                    errors.append("Supadata returned non-English transcript; trying translatable captions")
+                    print("Supadata returned non-English transcript; trying translatable captions")
+
+                errors.append("Supadata returned too few chunks")
+            except Exception as e:
+                errors.append(f"Supadata failed: {str(e)}")
+                print(f"Supadata failed: {str(e)}")
+
+        if use_captions:
+            try:
+                chunks = self._get_transcript_api_captions(youtube_url)
+                if chunks and len(chunks) > 3:
+                    print(f"youtube-transcript-api succeeded with {len(chunks)} chunks")
+                    return merge_small_chunks(chunks)
+
+                errors.append("youtube-transcript-api returned too few chunks")
+            except Exception as e:
+                errors.append(f"youtube-transcript-api failed: {str(e)}")
+                print(f"youtube-transcript-api failed: {str(e)}")
+
+            try:
+                chunks = self._get_youtube_captions_with_ytdlp(youtube_url)
+                if chunks and len(chunks) > 3:
+                    print(f"yt-dlp caption extraction succeeded with {len(chunks)} chunks")
+                    return merge_small_chunks(chunks)
+
+                errors.append("yt-dlp captions returned too few chunks")
+            except Exception as e:
+                errors.append(f"yt-dlp captions failed: {str(e)}")
+                print(f"yt-dlp captions failed: {str(e)}")
+
+        if use_openai:
             try:
                 chunks = self._transcribe_with_whisper(youtube_url)
                 if chunks and len(chunks) > 0:
@@ -37,57 +79,8 @@ class Agent1Ingestion:
 
                 errors.append("OpenAI Whisper returned no chunks")
             except Exception as e:
-                errors.append(f"OpenAI Whisper primary transcription failed: {str(e)}")
-                print(f"OpenAI Whisper primary transcription failed: {str(e)}")
-
-        try:
-            chunks = self._get_supadata_transcript(youtube_url)
-            if chunks and len(chunks) > 3:
-                if self._chunks_look_english(chunks):
-                    print(f"Supadata transcript extraction succeeded with {len(chunks)} chunks")
-                    return merge_small_chunks(chunks)
-
-                errors.append("Supadata returned non-English transcript; trying translatable captions")
-                print("Supadata returned non-English transcript; trying translatable captions")
-
-            errors.append("Supadata returned too few chunks")
-        except Exception as e:
-            errors.append(f"Supadata failed: {str(e)}")
-            print(f"Supadata failed: {str(e)}")
-
-        try:
-            chunks = self._get_transcript_api_captions(youtube_url)
-            if chunks and len(chunks) > 3:
-                print(f"youtube-transcript-api succeeded with {len(chunks)} chunks")
-                return merge_small_chunks(chunks)
-
-            errors.append("youtube-transcript-api returned too few chunks")
-        except Exception as e:
-            errors.append(f"youtube-transcript-api failed: {str(e)}")
-            print(f"youtube-transcript-api failed: {str(e)}")
-
-        try:
-            chunks = self._get_youtube_captions_with_ytdlp(youtube_url)
-            if chunks and len(chunks) > 3:
-                print(f"yt-dlp caption extraction succeeded with {len(chunks)} chunks")
-                return merge_small_chunks(chunks)
-
-            errors.append("yt-dlp captions returned too few chunks")
-        except Exception as e:
-            errors.append(f"yt-dlp captions failed: {str(e)}")
-            print(f"yt-dlp captions failed: {str(e)}")
-
-        if not tried_openai_first:
-            try:
-                chunks = self._transcribe_with_whisper(youtube_url)
-                if chunks and len(chunks) > 0:
-                    print(f"Whisper transcription succeeded with {len(chunks)} chunks")
-                    return merge_small_chunks(chunks)
-
-                errors.append("Whisper returned no chunks")
-            except Exception as e:
-                errors.append(f"Whisper fallback failed: {str(e)}")
-                print(f"Whisper fallback failed: {str(e)}")
+                errors.append(f"OpenAI Whisper transcription failed: {str(e)}")
+                print(f"OpenAI Whisper transcription failed: {str(e)}")
 
         raise RuntimeError(
             "Could not extract transcript from this YouTube URL. "
@@ -95,9 +88,15 @@ class Agent1Ingestion:
             + " | ".join(errors)
         )
 
-    def _should_try_openai_transcription_first(self) -> bool:
+    def _get_transcript_provider(self) -> str:
         provider = os.getenv("LECTUREFORGE_TRANSCRIPT_PROVIDER", "").strip().lower()
 
+        if provider:
+            return provider
+
+        return "auto"
+
+    def _should_try_openai_transcription_first(self, provider: str) -> bool:
         if provider in {"openai", "whisper"}:
             return True
 
@@ -122,10 +121,13 @@ class Agent1Ingestion:
             os.getenv("ENV"),
             os.getenv("ENVIRONMENT"),
             os.getenv("NODE_ENV"),
+            os.getenv("VERCEL_ENV"),
+            os.getenv("RAILWAY_ENVIRONMENT"),
+            os.getenv("RENDER_EXTERNAL_HOSTNAME"),
         ]
 
         return any(os.getenv(marker) for marker in production_markers) or any(
-            str(value).lower() == "production"
+            str(value).lower() in {"production", "prod"}
             for value in environment_values
             if value
         )
@@ -529,23 +531,7 @@ class Agent1Ingestion:
 
     def _transcribe_with_whisper(self, youtube_url: str) -> List[TranscriptChunk]:
         with tempfile.TemporaryDirectory() as temp_dir:
-            output_template = os.path.join(temp_dir, "audio.%(ext)s")
-
-            command = [
-                "yt-dlp",
-                "-x",
-                "--audio-format",
-                "mp3",
-                "--audio-quality",
-                "5",
-                "--extractor-args",
-                "youtube:player_client=default,ios,android",
-                "-o",
-                output_template,
-                youtube_url,
-            ]
-
-            self._run_command(command)
+            self._download_audio_for_openai(youtube_url, temp_dir)
 
             audio_path = self._find_audio_file(temp_dir)
 
@@ -587,8 +573,35 @@ class Agent1Ingestion:
 
             return chunks
 
+    def _download_audio_for_openai(self, youtube_url: str, temp_dir: str):
+        output_template = os.path.join(temp_dir, "audio.%(ext)s")
+
+        ydl_options = {
+            "format": "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio",
+            "outtmpl": output_template,
+            "quiet": True,
+            "no_warnings": True,
+            "noplaylist": True,
+            "extractor_args": {
+                "youtube": {
+                    "player_client": ["default", "ios", "android"],
+                },
+            },
+        }
+
+        with YoutubeDL(ydl_options) as ydl:
+            ydl.download([youtube_url])
+
     def _find_audio_file(self, temp_dir: str) -> Optional[str]:
-        supported_extensions = [".mp3", ".m4a", ".webm", ".wav"]
+        supported_extensions = [
+            ".mp3",
+            ".mp4",
+            ".mpeg",
+            ".mpga",
+            ".m4a",
+            ".wav",
+            ".webm",
+        ]
 
         for file in os.listdir(temp_dir):
             file_path = os.path.join(temp_dir, file)
