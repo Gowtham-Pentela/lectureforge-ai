@@ -82,18 +82,47 @@ def create_embeddings(texts: List[str]) -> List[List[float]]:
 
 
 def generate_json_with_openai(system_prompt: str, user_prompt: str) -> Dict[str, Any]:
-    response = client.chat.completions.create(
-        model=OPENAI_MODEL,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        response_format={"type": "json_object"},
-        temperature=0.2,
-    )
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
+    last_error = None
+    max_attempts = int(os.getenv("OPENAI_JSON_MAX_RETRIES", "2"))
 
-    content = response.choices[0].message.content
-    return json.loads(content)
+    for attempt in range(max_attempts):
+        response = client.chat.completions.create(
+            model=OPENAI_MODEL,
+            messages=messages,
+            response_format={"type": "json_object"},
+            temperature=0.1,
+        )
+
+        content = response.choices[0].message.content or ""
+
+        try:
+            parsed = parse_json_object(content)
+
+            if isinstance(parsed, dict):
+                return parsed
+
+            raise ValueError("Model returned JSON that was not an object")
+        except Exception as e:
+            last_error = e
+            messages.extend(
+                [
+                    {"role": "assistant", "content": content},
+                    {
+                        "role": "user",
+                        "content": (
+                            "The previous response did not match the requested JSON object. "
+                            "Return only a valid JSON object with the exact schema requested. "
+                            "Do not include markdown or extra commentary."
+                        ),
+                    },
+                ]
+            )
+
+    raise last_error
 
 
 def generate_text_with_ollama(system_prompt: str, user_prompt: str) -> str:
