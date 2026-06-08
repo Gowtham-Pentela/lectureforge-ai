@@ -1,6 +1,19 @@
 
 # LectureForge AI
 
+> **Turn a YouTube lecture into a study kit and a private faculty audit.**
+
+LectureForge AI is an AI-powered learning and lecture-improvement workspace. Paste any YouTube lecture URL and get:
+
+- **For students** — a structured study kit with timestamped outlines, multi-depth summaries, flashcards, concept maps, semantic search, transcript view, and multilingual study support.
+- **For faculty** — a private, instructor-facing audit across pedagogy, accessibility, equity, clarity, pacing, cognitive load, and engagement, with a prioritized fix list and timestamped suggested rewrites.
+
+Built with FastAPI, React + Vite, Tailwind, React Flow, and the OpenAI API. Scaffolded for iOS and Android via Capacitor.
+
+**Live demo:** https://lectureforge-ai.vercel.app
+
+---
+
 LectureForge AI turns a single YouTube lecture URL into an interactive learning and lecture-improvement workspace.
 
 The app supports two modes:
